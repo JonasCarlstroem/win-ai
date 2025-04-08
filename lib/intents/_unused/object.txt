@@ -1,0 +1,5 @@
+chrome: Google Chrome
+notepad: Notepad application
+file: Generic file
+folder: Folder
+excel: Excel application

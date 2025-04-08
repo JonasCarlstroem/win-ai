@@ -10,8 +10,15 @@ if(MSVC)
 	add_compile_options(/bigobj)
 endif()
 
-add_executable(trainer "lib/train_classifier.cpp" "lib/classifier_data.h" "lib/commands.h" "lib/process.h")
+file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
+
+add_executable(trainer "lib/train_classifier.cpp" "lib/classification/classifier_data.h" "lib/classification/commands.h" "lib/process.h")
 add_executable(win-ai "main.cpp")
+
+add_custom_command(TARGET trainer POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+	"${CMAKE_SOURCE_DIR}/lib/intents"
+	"${CMAKE_BINARY_DIR}/intents")
 
 target_sources(trainer 
 	PRIVATE "G:/Dev/GIT/win-ai/deps/dlib-19.24.8/dlib/all/source.cpp")

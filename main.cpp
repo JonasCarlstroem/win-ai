@@ -1,49 +1,34 @@
 #include <iostream>
 #include <string>
-#include "lib/commands.h"
-#include "lib/classifier_data.h"
-#include <dlib/svm_threaded.h>
-#include <dlib/mlp.h>
+#include "lib/classification/commands.h"
+#include "lib/classification/classifier_data.h"
+#include "lib/types/definitions.h"
 #include <vector>
 
 using namespace dlib;
-//typedef matrix<double, 0, 1> sample_type;
-typedef mlp::kernel_1a_c net_type;
+//using df_type = one_vs_one_decision_function<one_vs_one_trainer<any_trainer<sample_type>>>;
 
-const long input_size = 20;
-const long hidden_size = 10;
-const long sec_hidden_size = 4;
+df_type& load_model(const std::string& model_filename) {
+    df_type df; //(input_size, hidden_size, sec_hidden_size, 4l);
+    deserialize(model_filename) >> df;
 
-net_type& load_model(const std::string& model_filename) {
-    net_type net(input_size, hidden_size, sec_hidden_size, 4l);
-    deserialize(model_filename) >> net;
-    return net;
+    return df;
 }
 
-int classify_input(net_type& net, const std::string& input_text) {
+int classify_input(df_type* df, const std::string& input_text, const std::set<std::string>& vocabulary) {
     std::vector<double> features = extract_features(input_text);
 
     if (features.size() != 20) return -1;
 
-    matrix<double, 0, 1> sample(features.size(), 1);
+    sample_type sample(features.size(), 1);
     for (size_t i = 0; i < features.size(); ++i) {
         sample(i) = features[i];
     }
 
-    if (sample.nr() != net.input_layer_nodes()) {
-        std::cerr << "[Error] sample.nr() != net.input_layer_nodes()" << std::endl;
-        return -1;
-    }
-
-    if (sample.nc() != 1) {
-        std::cerr << "[Error] sample.nc() != 1" << std::endl;
-    }
+    std::vector<sample_type> test_samples = preprocess_text({ input_text }, vocabulary);
 
     try {
-        auto predict = net.operator()(sample);
-        auto prediction = net(sample);
-        //the rest of this part we can disregard for now.
-        //return net(sample);
+        return (*df)(test_samples[0]);
     }
     catch (const std::exception& ex) {
         std::cerr << ex.what();
@@ -52,15 +37,24 @@ int classify_input(net_type& net, const std::string& input_text) {
 }
 
 int main() {
-    net_type& net = load_model("mlp_command_classifier.dat");
+    df_type df; // = load_model("mlp_command_classifier.dat");
 
+    try {
+        deserialize("mlp_command_classifier.dat") >> df;
+    }
+    catch (const std::exception& e) {
+        std::cerr << e.what();
+        return -1;
+    }
+
+    std::set<std::string> vocabulary = load_vocabulary();
     std::string user_input;
 
     while (true) {
         std::cout << "input> ";
         std::getline(std::cin, user_input);
 
-        int command = classify_input(net, user_input);
+        int command = classify_input(&df, user_input, vocabulary);
 
         std::string intent_name;
         switch (command) {

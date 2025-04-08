@@ -1,0 +1,62 @@
+open chrome
+start browser
+launch browser
+Launch
+Start
+Open
+Open Browser
+Initiate
+Browser Process
+Start Browser
+Browser Window
+New Tab
+URL Entry
+Address Bar
+Navigate
+Load Website
+Visit Website
+Go to
+Enter URL
+Access Site
+Navigate to
+Load Page
+Home Page
+Navigate Away
+Redirect
+Page Load
+Open New Tab
+Switch Tab
+Tab Switching
+Back Button
+Forward Button
+History Navigation
+Bookmarks
+Bookmarklet
+Navigate Back
+Navigate Forward
+Go Back
+Go Forward
+URL Bar
+Clear Cache
+Incognito Mode
+Private Browsing
+Browse
+Web Navigation
+Site Navigation
+Tab Management
+Browser Window
+Browser Session
+Page Refresh
+Reload
+Hard Reload
+Stop Loading
+Timeout
+Error Page
+DNS Lookup
+Domain Resolution
+Page Rendering
+MS Edge
+Edge
+Google Chrome
+Chrome
+Firefox

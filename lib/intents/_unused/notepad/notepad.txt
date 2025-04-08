@@ -1,0 +1,3 @@
+notepad
+open notepad
+start notepad

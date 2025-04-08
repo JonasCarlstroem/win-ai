@@ -1,0 +1,8 @@
+create
+new
+open
+cat
+create new
+create file
+new file
+create new file

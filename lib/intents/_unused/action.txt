@@ -1,0 +1,5 @@
+open: Opens an application or file
+close: Closes an application or file
+start: Starts an application or service
+stop: Stops an application or service
+create: Creates a new file or folder

@@ -1,0 +1,93 @@
+show me the file
+read document
+read file
+File
+File System
+File Path
+File Name
+File Extension
+File Type
+File Format
+File Size
+File Permissions
+File Attribute
+File Metadata
+File Creation Date
+File Modification Date
+File Access Date
+File Owner
+File Handle
+File Descriptor
+File Stream
+File Input
+File Output
+File Reader
+File Writer
+Open File
+Close File
+Read File
+Write File
+Save File
+Save As
+Copy File
+Move File
+Delete File
+Rename File
+File Transfer
+File Upload
+File Download
+File Compression
+File Extraction
+File Archive
+Zip File
+Unzip File
+Tar File
+File Conversion
+File Format Conversion
+File Encryption
+File Decryption
+File Locking
+File Sharing
+File Synchronization
+File Backup
+File Restore
+File Recovery
+Temporary File
+Hidden File
+System File
+Executable File
+Configuration File
+Text File
+Binary File
+Image File
+Audio File
+Video File
+Document File
+CSV File
+JSON File
+XML File
+Log File
+Metadata File
+Index File
+Data File
+File Corruption
+Corrupted File
+File Integrity
+File Checksum
+File Integrity Check
+File Comparison
+File Versioning
+File History
+File Snapshot
+File System Navigation
+File System Structure
+File Explorer
+File Manager
+File Tree
+File List
+File Search
+File Indexing
+File Access Control
+File Permissions Management
+File Sharing Settings
+File Upload Progress

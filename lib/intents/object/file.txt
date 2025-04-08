@@ -1,0 +1,9 @@
+file
+document
+entry
+path
+folder
+directory
+record
+disk entry
+filesystem entry

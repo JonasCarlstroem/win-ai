@@ -1,0 +1,10 @@
+open
+start
+run
+open file
+open document
+open process
+start process
+start application
+run process
+run application
