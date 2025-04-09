@@ -13,7 +13,7 @@ endif()
 file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
 
 set(AI_SOURCES "lib/classification/intent_classifier.h" "lib/classification/command_resolver.h")
-add_executable(trainer "lib/train_classifier.cpp" "lib/classification/classifier_data.h" "lib/classification/commands.h" "lib/process.h")
+add_executable(trainer "train_classifier.cpp" "lib/classification/classifier_data.h" "lib/process.h")
 add_executable(win-ai "main.cpp")
 
 add_custom_command(TARGET trainer POST_BUILD

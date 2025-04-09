@@ -23,14 +23,14 @@ public:
         type(name) {}
 
     void load_vocabulary() {
-        vocab.clear();
+        vocabulary.clear();
 
         std::string vocab_file = model_vocabulary();
 
         std::ifstream in(model_vocabulary());
         std::string word;
         while (std::getline(in, word)) {
-            vocab.push_back(word);
+            vocabulary.push_back(word);
         }
     }
 
@@ -72,15 +72,15 @@ public:
     }
 
     int classify(const string& input) const {
-        sample_type sample(vocab.size());
+        sample_type sample(vocabulary.size());
         sample = 0;
 
         std::istringstream iss(input);
         std::string word;
         while (iss >> word) {
-            auto it = find(vocab.begin(), vocab.end(), word);
-            if (it != vocab.end()) {
-                int idx = distance(vocab.begin(), it);
+            auto it = find(vocabulary.begin(), vocabulary.end(), word);
+            if (it != vocabulary.end()) {
+                int idx = distance(vocabulary.begin(), it);
                 sample(idx) += 1.0;
             }
         }
@@ -97,32 +97,12 @@ public:
         return label_for(id);
     }
 
-    //int classify(const std::string& input) const {
-    //    sample_type sample = text_to_sample(input);
-    //    return df(sample);
-    //    //sample_type sample(vocabulary.size());
-    //    //sample = 0;
-    //    //for (size_t i = 0; i < vocabulary.size(); ++i) {
-    //    //    if (input.find(vocabulary[i]) != std::string::npos)
-    //    //        sample(i) = 1.0;
-    //    //}
-
-    //    //try {
-    //    //    int label_idx = df(sample);
-    //    //    return index_to_label.at(label_idx);
-    //    //}
-    //    //catch (...) {
-    //    //    return "unknown";
-    //    //}
-    //}
-
 private:
     output out;
     std::string type;
     std::unordered_map<std::string, int> label_to_index;
     std::unordered_map<int, std::string> index_to_label;
-    //std::unordered_map<std::string, int> vocabulary;
-    std::vector<std::string> vocab;
+    std::vector<std::string> vocabulary;
     std::vector<std::string> labels;
     df_type df;
 

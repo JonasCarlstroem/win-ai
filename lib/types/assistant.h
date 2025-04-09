@@ -3,8 +3,9 @@
 #include <fstream>
 #include "action.h"
 #include "object.h"
-#include "intent.h"
+#include "AI/intent.h"
 
+/// @brief Currently unused
 class ai_assistant {
 private:
     std::map<std::string, action_type> actions_map;
