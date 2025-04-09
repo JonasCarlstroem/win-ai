@@ -3,18 +3,21 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include "../util.h"
 #include "../types/definitions.h"
 
 namespace fs = std::filesystem;
 
 class intent_trainer {
-private:
+    output out;
     std::vector<std::string> vocabulary;
+    df_type df_trainer;
 
 public:
     std::string base_path;
 
     intent_trainer(std::string base_path) : 
+        out("Trainer"),
         base_path(base_path) {}
 
     void build_vocabulary() {
@@ -48,14 +51,13 @@ public:
         return samples;
     }
 
-    void train(const std::string& output_file) {
+    void train() {
         std::vector<sample_type> samples;
         std::vector<label_type> labels;
         std::map<std::string, int> label_map;
 
+        out("Training model");
         label_type label_index = 0;
-        //std::vector<std::string> vocabulary = build_vocabulary(base_path);
-
         for (const auto& file : fs::directory_iterator(base_path)) {
             if (file.path().extension() == ".txt") {
                 std::string label = file.path().stem().string();
@@ -84,11 +86,39 @@ public:
         ovo_trainer o_trainer;
         o_trainer.set_trainer(trainer);
 
-        df_type df = o_trainer.train(samples, labels);
+        df_trainer = o_trainer.train(samples, labels);
+        out("Model trained successfully.");
+    }
 
-        serialize(output_file) << df;
-        serialize(output_file + ".vocabulary") << vocabulary;
+    void save(const std::string& output_file) {
+        fs::path out_path = fs::path(output_file);
+        fs::directory_entry parent_dir = fs::directory_entry(out_path.parent_path());
+        if (!parent_dir.exists()) {
+            fs::create_directory(out_path.parent_path());
+        }
 
-        std::cout << "Trained and saved classifier to: " << output_file << std::endl;
+        if (!parent_dir.exists()) {
+            out.err("Error creating directory: ", out_path.parent_path());
+            return;
+        }
+
+        out("Saving model data to file: ", output_file);
+        out("\tModel file: ", output_file, ".dat");
+        out("\tVocabulary file: ", output_file, ".vocab");
+
+        serialize(output_file + ".dat") << df_trainer;
+
+        std::ofstream out_file(output_file + ".vocab");
+        if (!out_file.is_open()) {
+            out.err("Failed to create vocabulary file...");
+            return;
+        }
+
+        for (const auto& word : vocabulary) {
+            out_file << word << std::endl;
+        }
+
+        out_file.close();
+        out("Saved classifier to: ", output_file);
     }
 };

@@ -2,6 +2,8 @@
 #include <string>
 #include "lib/classification/commands.h"
 #include "lib/classification/classifier_data.h"
+#include "lib/classification/intent_classifier.h"
+#include "lib/classification/command_resolver.h"
 #include "lib/types/definitions.h"
 #include <vector>
 
@@ -37,46 +39,59 @@ int classify_input(df_type* df, const std::string& input_text, const std::set<st
 }
 
 int main() {
-    df_type df; // = load_model("mlp_command_classifier.dat");
+    command_resolver resolver;
+    resolver.load_classifiers("intents");
 
-    try {
-        deserialize("mlp_command_classifier.dat") >> df;
-    }
-    catch (const std::exception& e) {
-        std::cerr << e.what();
-        return -1;
-    }
-
-    std::set<std::string> vocabulary = load_vocabulary();
-    std::string user_input;
-
+    std::string input;
     while (true) {
         std::cout << "input> ";
-        std::getline(std::cin, user_input);
+        std::getline(std::cin, input);
 
-        int command = classify_input(&df, user_input, vocabulary);
+        auto [action, object] = resolver.resolve(input);
+        std::cout << "Resolved intent: " << action << " + " << object << std::endl;
 
-        std::string intent_name;
-        switch (command) {
-            case 0:
-            intent_name = "open_browser";
-            break;
-            case 1:
-            intent_name = "open_notepad";
-            break;
-            case 2:
-            intent_name = "read_file";
-            break;
-            case 3:
-            intent_name = "chat";
-            break;
-            default:
-            intent_name = "unknown";
-            break;
-        }
-
-        execute_intent(intent_name);
+        resolver.dispatch({ action, object });
     }
+    //df_type df; // = load_model("mlp_command_classifier.dat");
+
+    //try {
+    //    deserialize("mlp_command_classifier.dat") >> df;
+    //}
+    //catch (const std::exception& e) {
+    //    std::cerr << e.what();
+    //    return -1;
+    //}
+
+    //std::set<std::string> vocabulary = load_vocabulary();
+    //std::string user_input;
+
+    //while (true) {
+    //    std::cout << "input> ";
+    //    std::getline(std::cin, user_input);
+
+    //    int command = classify_input(&df, user_input, vocabulary);
+
+    //    std::string intent_name;
+    //    switch (command) {
+    //        case 0:
+    //        intent_name = "open_browser";
+    //        break;
+    //        case 1:
+    //        intent_name = "open_notepad";
+    //        break;
+    //        case 2:
+    //        intent_name = "read_file";
+    //        break;
+    //        case 3:
+    //        intent_name = "chat";
+    //        break;
+    //        default:
+    //        intent_name = "unknown";
+    //        break;
+    //    }
+
+    //    execute_intent(intent_name);
+    //}
 
     return 0;
 }

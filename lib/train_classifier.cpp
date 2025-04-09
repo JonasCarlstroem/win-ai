@@ -12,8 +12,11 @@ int main() {
     action_trainer.build_vocabulary();
     object_trainer.build_vocabulary();
 
-    action_trainer.train("action_classifier.dat");
-    object_trainer.train("object_classifier.dat");
+    action_trainer.train();
+    object_trainer.train();
+
+    action_trainer.save("models/action_classifier");
+    object_trainer.save("models/object_classifier");
     /*train_classifier("intents/action", "action_classifier.dat");
     train_classifier("intents/object", "object_classifier.dat");*/
     //std::vector<std::string> texts;
