@@ -4,14 +4,13 @@
 #include "commands.h"
 #include "../util.h"
 #include "../types/AI/action.h"
-#include "../types/AI/domain/browser.h"
+#include "../types/AI/domain/browser_intent_handler.h"
 #include "../types/AI/intent.h"
 
 class command_resolver {
     output out;
     intent_classifier action_classifier;
     intent_classifier object_classifier;
-    browser browser_domain;
     action_registry& registry;
 
 public:
@@ -19,10 +18,7 @@ public:
         out("Resolver"), 
         action_classifier("action"), 
         object_classifier("object"),
-        browser_domain(),
-        registry(registry) {
-        browser_domain.register_actions(registry);
-    }
+        registry(registry) { }
 
     void load_classifiers(const std::string& base_path) {
         if (!action_classifier.load_model() || !object_classifier.load_model()) {
