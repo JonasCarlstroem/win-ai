@@ -16,10 +16,23 @@ file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
 add_executable(trainer "train_classifier.cpp" "lib/classification/classifier_data.h" "lib/process.h")
 add_executable(win-ai "main.cpp" ${AI_SOURCES})
 
+set(INTENTS_OUT_DIR "${CMAKE_BINARY_DIR}/intents")
+set(INTENTS_SRC_DIR "${CMAKE_SOURCE_DIR}/lib/intents")
+
+message(STATUS "INTENTS_OUT_DIR=${INTENTS_OUT_DIR}")
+message(STATUS "INTENTS_SRC_DIR=${INTENTS_SRC_DIR}")
+
+add_custom_command(TARGET trainer PRE_BUILD
+	COMMAND ${CMAKE_COMMAND} -E remove_directory ${INTENTS_OUT_DIR}
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${INTENTS_OUT_DIR}
+	COMMENT "Clearing intents folder")
+
 add_custom_command(TARGET trainer POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
-	"${CMAKE_SOURCE_DIR}/lib/intents"
-	"${CMAKE_BINARY_DIR}/intents")
+	${INTENTS_SRC_DIR}
+	${INTENTS_OUT_DIR})
+
+add_custom_target(clear_folder ALL DEPENDS ${INTENTS_OUT_DIR}/cleared_marker.txt)
 
 target_sources(trainer 
 	PRIVATE "G:/Dev/GIT/win-ai/deps/dlib-19.24.8/dlib/all/source.cpp")

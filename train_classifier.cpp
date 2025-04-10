@@ -1,7 +1,7 @@
 #include <dlib/svm_threaded.h>
-#include "classification/classifier_data.h"
-#include "classification/intent_trainer.h"
-#include "types/definitions.h"
+#include "lib/classification/classifier_data.h"
+#include "lib/classification/intent_trainer.h"
+#include "lib/types/definitions.h"
 
 using namespace dlib;
 

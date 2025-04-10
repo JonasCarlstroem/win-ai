@@ -1,6 +1,9 @@
 open
 start
 run
+open edge
+open chrome
+open firefox
 open file
 open document
 open process

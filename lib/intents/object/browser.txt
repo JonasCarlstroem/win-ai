@@ -5,6 +5,4 @@ ms edge
 google chrome
 browser
 web browser
-web site
-site
-navigate
+safari

@@ -13,7 +13,7 @@ class intent_resolver {
     intent_classifier object_classifier;
 
 public:
-    intent_resolver(action_registry& registry) :
+    intent_resolver() :
         out("Resolver"), 
         action_classifier("action"), 
         object_classifier("object") { }
@@ -31,7 +31,7 @@ public:
         intent_pair pair = { action_name, object_name };
 
         action_registry& a_reg = action_registry::instance();
-        intent_handler_registry ih_reg = intent_handler_registry::instance();
+        intent_handler_registry& ih_reg = intent_handler_registry::instance();
 
         std::unique_ptr<action> intent_action = action_registry::instance().resolve(pair);
         std::unique_ptr<intent_handler> handler = intent_handler_registry::instance().create(action_name);

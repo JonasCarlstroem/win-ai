@@ -3,7 +3,7 @@
 #include "lib/classification/commands.h"
 #include "lib/classification/classifier_data.h"
 #include "lib/classification/intent_classifier.h"
-#include "lib/classification/command_resolver.h"
+#include "lib/classification/intent_resolver.h"
 #include "lib/types/definitions.h"
 #include "lib/types/AI/intent.h"
 #include <vector>
@@ -11,8 +11,7 @@
 using namespace dlib;
 
 int main() {
-    action_registry registry;
-    intent_resolver resolver(registry);
+    intent_resolver resolver;
     resolver.load_classifiers("intents");
 
     std::string input;
