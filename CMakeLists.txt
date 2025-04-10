@@ -13,6 +13,7 @@ endif()
 
 file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
 
+add_executable(wgen "wgen.cpp")
 add_executable(trainer "train_classifier.cpp" "lib/classification/classifier_data.h" "lib/process.h")
 add_executable(win-ai "main.cpp" ${AI_SOURCES})
 
