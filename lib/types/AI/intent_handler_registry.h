@@ -3,8 +3,9 @@
 #include <functional>
 #include <memory>
 #include "intent_handler.h"
+#include "../../util.h"
 
-using handler_factory = std::function<std::unique_ptr<intent_handler>()>;
+using intent_handler_factory = std::function<std::unique_ptr<intent_handler>()>;
 
 class intent_handler_registry {
 public:
@@ -13,18 +14,29 @@ public:
         return instance;
     }
 
-    void register_handler(const std::string& name, handler_factory factory) {
-        factories[name] = std::move(factory);
+    template<typename T>
+    void register_intent_handler(const std::string& name) {
+
+    }
+
+    void register_handler(const std::string& name, intent_handler_factory factory) {
+        intent_handler_factories[name] = std::move(factory);
     }
 
     std::unique_ptr<intent_handler> create(const std::string& name) {
-        auto it = factories.find(name);
-        if (it != factories.end()) {
+        auto it = intent_handler_factories.find(name);
+        if (it != intent_handler_factories.end()) {
             return (it->second)();
         }
         return nullptr;
     }
 
+    intent_handler_registry(const intent_handler_registry&) = delete;
+    intent_handler_registry(const intent_handler_registry&&) = delete;
+
 private:
-    std::unordered_map<std::string, handler_factory> factories;
+    output out;
+    std::unordered_map<std::string, intent_handler_factory> intent_handler_factories;
+
+    intent_handler_registry() : out("intent_handler_registry"), intent_handler_factories() {}
 };

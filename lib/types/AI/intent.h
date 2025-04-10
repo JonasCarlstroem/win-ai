@@ -12,11 +12,11 @@ struct intent_pair {
 
 class intent {
 public:
-    intent_pair command;
-    action*     intent_action;
+    intent_pair             command;
+    std::unique_ptr<action> intent_action;
 
-    intent(const intent_pair& pair, action* action) :
-        command(pair), intent_action(action) {}
+    intent(const intent_pair& pair, std::unique_ptr<action>&& action) :
+        command(pair), intent_action(std::move(action)) {}
 
     void execute(const std::string& parameters = "") const {
         intent_action->execute(parameters);

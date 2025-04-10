@@ -1,6 +1,7 @@
 #pragma once
 #include "../intent_handler.h"
 #include "../intent_handler_registry.h"
+#include "../actions/file_actions.h"
 
 class file_intent_handler : public intent_handler {
 public:
@@ -14,4 +15,4 @@ inline bool _file_handler_registered = [] {
         return std::make_unique<file_intent_handler>();
     });
     return true;
-}
+}();

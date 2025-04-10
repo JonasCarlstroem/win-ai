@@ -12,7 +12,7 @@ using namespace dlib;
 
 int main() {
     action_registry registry;
-    command_resolver resolver(registry);
+    intent_resolver resolver(registry);
     resolver.load_classifiers("intents");
 
     std::string input;

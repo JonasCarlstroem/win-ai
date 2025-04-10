@@ -2,6 +2,7 @@
 #include "../action.h"
 #include "../intent_handler.h"
 #include "../intent_handler_registry.h"
+#include "../actions/browser_actions.h"
 
 class browser_intent_handler : public intent_handler {
 public:
