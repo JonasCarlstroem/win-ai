@@ -6,56 +6,63 @@
 #include <fstream>
 #include <set>
 #include <regex>
+#include "../util.h"
+#include "lex_types.h"
 
-struct lex_section {
-    std::string number;
-    std::string name;
-    int start_row;
-};
+#define _R(reg) std::regex(R##reg)
+#define REG_CLASS _R("(CLASS\s+([IVXLCDM]+))")
+#define REG_SECTION _R("(SECTION\s+([IVXLCDM]+)\.)")
+#define REG_ENTRY_HEADER _R("(^(\d+)\.\s+[A-Z][A-Z, ]+$)")
+#define REG_ENTRY _R("(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)")
 
-typedef std::unordered_map<std::string, lex_section> lex_section_index;
-
-struct lex_class {
-    std::string name;
-    std::string description;
-    lex_section_index sections;
-
-    int start_row;
-};
-
-typedef std::unordered_map<std::string, lex_class> lex_index;
-typedef std::unordered_map<std::string, std::set<std::string>> lex_verbs;
+char REG_CLS[] = "(CLASS\s+([IVXLCDM]+))";
+char REG_SEC[] = "(SECTION\s+([IVXLCDM]+)\.)";
+char REG_ENT_H[] = "(^(\d+)\.\s+[A-Z][A-Z, ]+$)";
+char REG_ENT[] = "(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)";
 
 class lex_parser {
 public:
-    lex_parser(const std::string& lex_file) : out("lex_parser"), _index() {
-        std::ifstream is(lex_file);
-        if (!is.is_open()) {
-            out("Error opening file: ", lex_file);
+    lex_parser(const std::string& lex_file, output* out) : out(out), _index(), _ifs(lex_file) {
+        if (!_ifs.is_open()) {
+            (*out)("Error opening file: ", lex_file);
             exit(-1);
         }
         else {
-            extract_indices(is);
+            extract_indices();
         }
     }
 
     void display_toc() {
-        out("--- Table of content ---");
-        out("");
+        (*out)("--- Table of content ---");
+        (*out)("");
 
         for (const auto& index : _index) {
             auto& lc = index.second;
-            out(lc.name, " - ", lc.description, " (Row: ", lc.start_row, ")");
+            (*out)(lc.name, " - ", lc.description, " (Row: ", lc.start_row, ")");
             for (const auto& pair : index.second.sections) {
                 const auto& section = pair.second;
-                out("\t", section.number, ": ", section.name, " (Row: ", section.start_row, ")");
+                (*out)("\t", section.number, ": ", section.name, " (Row: ", section.start_row, ")");
             }
-            out("");
+            (*out)("");
         }
     }
 
     void display_section(int section) {
+        std::string section_str = std::to_string(section);
+        for (const auto& [class_name, lex_cls] : _index) {
+            auto it = lex_cls.sections.find(section_str);
+            if (it != lex_cls.sections.end()) {
+                const auto& section = it->second;
 
+                (*out)("--- Section ", section.number, ": ", section.name, " ---");
+                for (const auto& entry : section.entries) {
+                    (*out)(entry.number, ". ", join(entry.terms, ", "), " [", entry.pos, "]");
+                }
+                return;
+            }
+        }
+
+        (*out)("Section ", section, " not found.");
     }
 
     std::string find_section() {
@@ -63,9 +70,13 @@ public:
     }
 
 private:
-    output out;
-    lex_index _index;
-    lex_verbs _verbs;
+    output* out;
+
+    lex_class_index _index;
+    lex_verbs_index _verbs;
+    std::unordered_map<std::string, std::string> _entry_headers;
+
+    std::ifstream _ifs;
 
     struct {
         struct {
@@ -84,70 +95,168 @@ private:
             int current_row = 0;
             std::string line;
             std::smatch match;
-        } current_iteration;
+        } current_iteration_values;
     } entry;
 
-    void extract_class() {
-        
+    auto& c_class() { return entry.current_class; }
+    auto& c_section() { return entry.current_section; }
+    auto& c_iteration() { return entry.current_iteration_values; }
+
+    bool next_line() {
+        if (std::getline(_ifs, entry.current_iteration_values.line)) {
+            c_iteration().current_row++;
+            return true;
+        }
+        return false;
     }
 
-    void extract_indices(std::ifstream& ifs) {
-        auto& iter = entry.current_iteration;
-        iter.current_row = 0;
+    std::string peek_next_line() {
+        std::streampos current_pos = _ifs.tellg();
 
-        auto& next_line = [&] {
-            if (std::getline(ifs, iter.line)) {
-                iter.current_row++;
-                return true;
-            }
-            return false;
+        std::string next;
+        if (std::getline(_ifs, next)) {
+            _ifs.seekg(current_pos);
+        }
+        else {
+            _ifs.clear();
+            _ifs.seekg(current_pos);
+        }
+
+        return next;
+    }
+
+    void extract_class() {
+        auto& [cls_name, cls_desc, cls_row] = c_class();
+
+        cls_row = c_iteration().current_row;
+        cls_name = c_iteration().line;
+        cls_desc = peek_next_line();
+
+        lex_class class_entry = {
+            cls_name,
+            cls_desc,
+            {},
+            cls_row
         };
-        auto& cls = entry.current_class;
-        auto& sec = entry.current_section;
+
+        _index[class_entry.name] = class_entry;
+    }
+
+    void extract_section() {
+        auto& [sec_num, sec_name, sec_row] = c_section();
+        auto& [cls_name, cls_desc, cls_row] = c_class();
+        auto [current_row, line, match] = c_iteration();
+
+        sec_row = c_iteration().current_row;
+        sec_num = c_iteration().match[1];
+        sec_name = peek_next_line();
+
+        lex_section section = {
+            sec_num,
+            sec_name,
+            {},
+            sec_row
+        };
+
+        _index[cls_name].sections[section.number] = std::move(section);
+    }
+
+    void extract_entry_header() {
+        auto [row, line, _] = c_iteration();
+        std::string header_number = line.substr(0, line.find('.'));
+        std::string header_text = line;
+
+        _entry_headers[std::move(header_number)] = std::move(header_text);
+
+        if (out) {
+            (*out)("Header: ", line, " at row ", row);
+        }
+    }
+
+    void extract_entry() {
+        auto& [row, line, match] = c_iteration();
+
+        std::string entry_number = match[1];
+        std::string entry_terms_raw = match[2];
+        std::string pos = match[3];
+
+        std::vector<std::string> terms = split(entry_terms_raw, ',');
+
+        for (auto& term : terms) {
+            term = trim(term);
+        }
+
+        if (out) {
+            (*out)("Entry: ", entry_number, " | POS: ", pos, " | Terms: ", join(terms, ", "));
+        }
+
+        lex_entry entry = {
+            entry_number,
+            line,
+            pos,
+            terms
+        };
+
+        auto& cls = _index[c_class().current_class];
+        auto& section = cls.sections[c_section().section_number];
+        section.entries.push_back(entry);
+
+        _verbs[pos].push_back(std::move(entry));
+    }
+
+    void extract_indices() {
+        c_iteration().current_row = 0;
+
         while (next_line()) {
-            if (match_pat(std::regex(R"(CLASS\s+([IVXLCDM]+))"))) {
-                cls.class_start_row = iter.current_row;
-                cls.current_class = iter.line;
-                next_line();
-                cls.current_description = iter.line;
+            if (match_class()) {
+                extract_class();
             } 
-            else if (match_pat(std::regex(R"(SECTION\s+([IVXLCDM]+)\.)"))) {
-                sec.section_start_row = iter.current_row;
-                sec.section_number = iter.match[1];
-                next_line();
-                sec.section_name = iter.line;
-
-                auto& it = _index.find(cls.current_class);
-                if (it != _index.end()) {
-                    const auto& [sec_num, sec_name, sec_row] = sec;
-                    auto& sections = it->second.sections;
-                    sections[sec_num] = { sec_num, sec_name, sec_row };
-                }
-                else {
-                    auto& [sec_num, sec_name, sec_row] = sec;
-                    auto& [cls_name, cls_desc, cls_row] = cls;
-
-                    lex_section_index id_sec = { 
-                        {
-                            sec_num, {
-                                sec_num, 
-                                sec_name,
-                                sec_row
-                            }
-                        }
-                    };
-
-                    lex_class cls = { cls_name, cls_desc, id_sec, cls_row };
-                    _index[cls.name] = cls;
-                }
+            else if (match_section()) {
+                extract_section();
+            }
+            else if (match_entry_header()) {
+                extract_entry_header();
+            }
+            else if (match_entry()) {
+                extract_entry();
             }
         }
 
         entry = { };
     }
 
-    bool match_pat(const std::regex& pattern) {
-        auto& [_, line, match] = entry.current_iteration;
-        return std::regex_match(line, match, pattern);
+    bool match_class() {
+        return match_pat(REG_CLS);
+    }
+
+    bool match_section() {
+        return match_pat(REG_SEC);
+    }
+
+    bool match_entry_header() {
+        return match_pat(REG_ENT_H);
+    }
+
+    bool match_entry() {
+        return match_pat(REG_ENT);
+    }
+
+    //bool match_pat(const std::regex& pattern) {
+    //    auto& [_, line, match] = c_iteration();
+    //    if (!std::regex_match(line, match, pattern)) {
+    //        (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
+    //        return false;
+    //    }
+    //    return true;
+    //}
+
+    template<size_t N>
+    bool match_pat(const char(&pattern)[N]) {
+        auto& [_, line, match] = c_iteration();
+        if (!std::regex_match(line, match, std::regex(pattern))) {
+            (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
+            return false;
+        }
+        return true;
     }
 };

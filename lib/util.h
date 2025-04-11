@@ -62,3 +62,31 @@ private:
         }
     }
 };
+
+inline std::string trim(const std::string& s) {
+    auto start = s.find_first_not_of(" \t\n\r");
+    auto end = s.find_last_not_of(" \t\n\r");
+
+    return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+}
+
+inline std::vector<std::string> split(const std::string& s, char delim) {
+    std::vector<std::string> result;
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        result.push_back(item);
+    }
+
+    return result;
+}
+
+inline std::string join(const std::vector<std::string>& parts, const std::string& sep) {
+    std::ostringstream os;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) os << sep;
+        os << parts[i];
+    }
+
+    return os.str();
+}
