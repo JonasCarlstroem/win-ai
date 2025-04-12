@@ -23,7 +23,7 @@ int main() {
         return 1;
     }
 
-    lex_parser parser("thesaurus.txt", &out);
+    lex_parser parser("thesaurus.txt", out);
     parser.display_toc();
 
     parser.display_section(1);

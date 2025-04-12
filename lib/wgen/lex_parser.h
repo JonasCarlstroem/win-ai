@@ -10,27 +10,42 @@
 #include "lex_types.h"
 
 #define _R(reg) std::regex(R##reg)
-#define _REG(name, pattern)     \
-const auto& name = R##pattern   
+#define _REG(name, pattern)                       \
+const auto& PATTERN_##name = ##pattern;           \
+const std::regex REG_##name(PATTERN_##name);
 
 //#define REG_CLASS _R("(CLASS\s+([IVXLCDM]+))")
 //#define REG_SECTION _R("(SECTION\s+([IVXLCDM]+)\.)")
 //#define REG_ENTRY_HEADER _R("(^(\d+)\.\s+[A-Z][A-Z, ]+$)")
 //#define REG_ENTRY _R("(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)")
 
-_REG(CLS_PAT, "(awd)");
-const auto& CLASS_PATTERN = _r("(Testingtesting)");
-const std::regex REG_CLASS = _R("(CLASS\\s+([IVXLCDM]+))");
-const std::regex REG_SECTION = _R("(SECTION\\s+([IVXLCDM]+)\\.)");
-const std::regex REG_ENTRY_HEADER = _R("(^(\\d+)\\.\\s+[A-Z][A-Z, ]+$)");
-const std::regex REG_ENTRY = _R("(^(\\d+)\\.\\s+(.*?)\\s+[-—–]\\s+([A-Z]+)\\.?)");
+_REG(CLASS, R"(CLASS\s+([IVXLCDM]+))");
+_REG(SECTION, R"(SECTION\s+([IVXLCDM]+)\.)");
+_REG(ENTRY_HEADER, R"(^(\d+)\.\s+[A-Z][A-Z, ]+$)");
+_REG(ENTRY, R"((\d+)\.\s+(.*?)\s*[-—–]\s*([A-Z]+)\.?)");
+
+std::unordered_map<const std::regex*, const char*> pattern_map = {
+    { &REG_CLASS, PATTERN_CLASS },
+    { &REG_SECTION, PATTERN_SECTION },
+    { &REG_ENTRY_HEADER, PATTERN_ENTRY_HEADER },
+    { &REG_ENTRY, PATTERN_ENTRY }
+};
+//const auto& PATTERN_CLASS = R"(CLASS\s+([IVXLCDM]+))";
+//const std::regex REG_CLASS(PATTERN_CLASS);
+//const auto& PATTERN_SECTION = R"(SECTION\s+([IVXLCDM]+)\.)";
+//const std::regex REG_SECTION(PATTERN_SECTION);
+//const auto& PATTERN_ENTRY_HEADER = R"(^(\d+)\.\s+[A-Z][A-Z, ]+$)";
+//const std::regex REG_ENTRY_HEADER(PATTERN_ENTRY_HEADER);
+//const auto& PATTERN_ENTRY = R"(^(\d+)\\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)";
+//const std::regex REG_ENTRY(PATTERN_ENTRY);
 
 class lex_parser {
 public:
-    lex_parser(const std::string& lex_file, output* out) : out(out), _index(), _ifs(lex_file) {
+    lex_parser(const std::string& lex_file, output& out = output("lex_parser")) : out(out), _index(), _ifs(lex_file) {
         if (!_ifs.is_open()) {
-            (*out)("Error opening file: ", lex_file);
+            out("Error opening file: ", lex_file);
             exit(-1);
+
         }
         else {
             extract_indices();
@@ -38,17 +53,17 @@ public:
     }
 
     void display_toc() {
-        (*out)("--- Table of content ---");
-        (*out)("");
+        out("--- Table of content ---");
+        out("");
 
         for (const auto& index : _index) {
             auto& lc = index.second;
-            (*out)(lc.name, " - ", lc.description, " (Row: ", lc.start_row, ")");
+            out(lc.name, " - ", lc.description, " (Row: ", lc.start_row, ")");
             for (const auto& pair : index.second.sections) {
                 const auto& section = pair.second;
-                (*out)("\t", section.number, ": ", section.name, " (Row: ", section.start_row, ")");
+                out("\t", section.number, ": ", section.name, " (Row: ", section.start_row, ")");
             }
-            (*out)("");
+            out("");
         }
     }
 
@@ -59,15 +74,15 @@ public:
             if (it != lex_cls.sections.end()) {
                 const auto& section = it->second;
 
-                (*out)("--- Section ", section.number, ": ", section.name, " ---");
+                out("--- Section ", section.number, ": ", section.name, " ---");
                 for (const auto& entry : section.entries) {
-                    (*out)(entry.number, ". ", join(entry.terms, ", "), " [", entry.pos, "]");
+                    out(entry.number, ". ", join(entry.terms, ", "), " [", entry.pos, "]");
                 }
                 return;
             }
         }
 
-        (*out)("Section ", section, " not found.");
+        out("Section ", section, " not found.");
     }
 
     std::string find_section() {
@@ -75,7 +90,7 @@ public:
     }
 
 private:
-    output* out;
+    output& out;
 
     lex_class_index _index;
     lex_verbs_index _verbs;
@@ -173,9 +188,7 @@ private:
 
         _entry_headers[std::move(header_number)] = std::move(header_text);
 
-        if (out) {
-            (*out)("Header: ", line, " at row ", row);
-        }
+        out("Header: ", line, " at row ", row);
     }
 
     void extract_entry() {
@@ -191,9 +204,7 @@ private:
             term = trim(term);
         }
 
-        if (out) {
-            (*out)("Entry: ", entry_number, " | POS: ", pos, " | Terms: ", join(terms, ", "));
-        }
+        out("Entry: ", entry_number, " | POS: ", pos, " | Terms: ", join(terms, ", "));
 
         lex_entry entry = {
             entry_number,
@@ -248,18 +259,19 @@ private:
 
     bool match_pat(const std::regex& pattern) {
         auto& [_, line, match] = c_iteration();
-        if (!std::regex_match(line, match, pattern)) {
-            (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
+        return std::regex_match(line, match, pattern);
+        /*if (!std::regex_match(line, match, pattern)) {
+            out("Regex \"", pattern_map[&pattern], "\" did not match line \"", line, "\"");
             return false;
         }
-        return true;
+        return true;*/
     }
 
     template<size_t N>
     bool match_pat(const char(&pattern)[N]) {
         auto& [_, line, match] = c_iteration();
         if (!std::regex_match(line, match, std::regex(pattern))) {
-            (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
+            out("Regex \"", pattern, "\" did not match line \"", line, "\"");
             return false;
         }
         return true;
