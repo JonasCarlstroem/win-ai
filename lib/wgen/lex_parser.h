@@ -10,15 +10,20 @@
 #include "lex_types.h"
 
 #define _R(reg) std::regex(R##reg)
-#define REG_CLASS _R("(CLASS\s+([IVXLCDM]+))")
-#define REG_SECTION _R("(SECTION\s+([IVXLCDM]+)\.)")
-#define REG_ENTRY_HEADER _R("(^(\d+)\.\s+[A-Z][A-Z, ]+$)")
-#define REG_ENTRY _R("(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)")
+#define _REG(name, pattern)     \
+const auto& name = R##pattern   
 
-char REG_CLS[] = "(CLASS\s+([IVXLCDM]+))";
-char REG_SEC[] = "(SECTION\s+([IVXLCDM]+)\.)";
-char REG_ENT_H[] = "(^(\d+)\.\s+[A-Z][A-Z, ]+$)";
-char REG_ENT[] = "(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)";
+//#define REG_CLASS _R("(CLASS\s+([IVXLCDM]+))")
+//#define REG_SECTION _R("(SECTION\s+([IVXLCDM]+)\.)")
+//#define REG_ENTRY_HEADER _R("(^(\d+)\.\s+[A-Z][A-Z, ]+$)")
+//#define REG_ENTRY _R("(^(\d+)\.\s+(.*?)\s+[-—–]\s+([A-Z]+)\.?)")
+
+_REG(CLS_PAT, "(awd)");
+const auto& CLASS_PATTERN = _r("(Testingtesting)");
+const std::regex REG_CLASS = _R("(CLASS\\s+([IVXLCDM]+))");
+const std::regex REG_SECTION = _R("(SECTION\\s+([IVXLCDM]+)\\.)");
+const std::regex REG_ENTRY_HEADER = _R("(^(\\d+)\\.\\s+[A-Z][A-Z, ]+$)");
+const std::regex REG_ENTRY = _R("(^(\\d+)\\.\\s+(.*?)\\s+[-—–]\\s+([A-Z]+)\\.?)");
 
 class lex_parser {
 public:
@@ -226,29 +231,29 @@ private:
     }
 
     bool match_class() {
-        return match_pat(REG_CLS);
+        return match_pat(REG_CLASS);
     }
 
     bool match_section() {
-        return match_pat(REG_SEC);
+        return match_pat(REG_SECTION);
     }
 
     bool match_entry_header() {
-        return match_pat(REG_ENT_H);
+        return match_pat(REG_ENTRY_HEADER);
     }
 
     bool match_entry() {
-        return match_pat(REG_ENT);
+        return match_pat(REG_ENTRY);
     }
 
-    //bool match_pat(const std::regex& pattern) {
-    //    auto& [_, line, match] = c_iteration();
-    //    if (!std::regex_match(line, match, pattern)) {
-    //        (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
-    //        return false;
-    //    }
-    //    return true;
-    //}
+    bool match_pat(const std::regex& pattern) {
+        auto& [_, line, match] = c_iteration();
+        if (!std::regex_match(line, match, pattern)) {
+            (*out)("Regex \"", pattern, "\" did not match line \"", line, "\"");
+            return false;
+        }
+        return true;
+    }
 
     template<size_t N>
     bool match_pat(const char(&pattern)[N]) {
