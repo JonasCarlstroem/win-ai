@@ -6,7 +6,8 @@
 
 struct lex_entry {
     std::string number;
-    std::string raw_line;
+    std::string name;
+    //std::string raw_line;
     std::string pos;
     std::vector<std::string> terms;
 };

@@ -1,4 +1,5 @@
-#pragma once
+Ôªø#pragma once
+
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -9,20 +10,17 @@
 #include "../util.h"
 #include "lex_types.h"
 
-#define _R(reg) std::regex(R##reg)
 #define _REG(name, pattern)                       \
 const auto& PATTERN_##name = ##pattern;           \
 const std::regex REG_##name(PATTERN_##name);
 
-//#define REG_CLASS _R("(CLASS\s+([IVXLCDM]+))")
-//#define REG_SECTION _R("(SECTION\s+([IVXLCDM]+)\.)")
-//#define REG_ENTRY_HEADER _R("(^(\d+)\.\s+[A-Z][A-Z, ]+$)")
-//#define REG_ENTRY _R("(^(\d+)\.\s+(.*?)\s+[-óñ]\s+([A-Z]+)\.?)")
-
 _REG(CLASS, R"(CLASS\s+([IVXLCDM]+))");
 _REG(SECTION, R"(SECTION\s+([IVXLCDM]+)\.)");
 _REG(ENTRY_HEADER, R"(^(\d+)\.\s+[A-Z][A-Z, ]+$)");
-_REG(ENTRY, R"((\d+)\.\s+(.*?)\s*[-óñ]\s*([A-Z]+)\.?)");
+//_REG(ENTRY, R"((\d+)\.\s+(.*?)\s*-\s*([A-Z]+\.?))");
+_REG(ENTRY, R"((\d+)\.\s+(.*?)(?:\s*-\s*([A-Z]+\.?))?)");
+//_REG(ENTRY, R"((\d*)\.\s*(.*?)(?:\s*-\s*([A-Z]+\.?))?)");
+//_REG(ENTRY, R"((?:(\d+)\.\s+)?([\w\-']+)(?:\s*-\s*([A-Z]+\.?))?)");
 
 std::unordered_map<const std::regex*, const char*> pattern_map = {
     { &REG_CLASS, PATTERN_CLASS },
@@ -30,27 +28,42 @@ std::unordered_map<const std::regex*, const char*> pattern_map = {
     { &REG_ENTRY_HEADER, PATTERN_ENTRY_HEADER },
     { &REG_ENTRY, PATTERN_ENTRY }
 };
-//const auto& PATTERN_CLASS = R"(CLASS\s+([IVXLCDM]+))";
-//const std::regex REG_CLASS(PATTERN_CLASS);
-//const auto& PATTERN_SECTION = R"(SECTION\s+([IVXLCDM]+)\.)";
-//const std::regex REG_SECTION(PATTERN_SECTION);
-//const auto& PATTERN_ENTRY_HEADER = R"(^(\d+)\.\s+[A-Z][A-Z, ]+$)";
-//const std::regex REG_ENTRY_HEADER(PATTERN_ENTRY_HEADER);
-//const auto& PATTERN_ENTRY = R"(^(\d+)\\.\s+(.*?)\s+[-óñ]\s+([A-Z]+)\.?)";
-//const std::regex REG_ENTRY(PATTERN_ENTRY);
+
+const std::vector<std::pair<std::regex, std::string>> cleaning_regex = {
+    { std::regex(R"(\[.*?\])"), "" },
+    { std::regex(R"(&c)"), "" },
+    { std::regex(R"(\s*;\s*)"), "," }
+};
 
 class lex_parser {
-public:
-    lex_parser(const std::string& lex_file, output& out = output("lex_parser")) : out(out), _index(), _ifs(lex_file) {
-        if (!_ifs.is_open()) {
-            out("Error opening file: ", lex_file);
-            exit(-1);
+private:
+    struct {
+        struct {
+            std::string current_class;
+            std::string current_description;
+            int class_start_row = 0;
+        } current_class;
 
-        }
-        else {
-            extract_indices();
-        }
-    }
+        struct {
+            std::string section_number;
+            std::string section_name;
+            int section_start_row = 0;
+        } current_section;
+
+        struct {
+            int current_row = 0;
+            std::string line;
+            std::smatch match;
+        } current_iteration_values;
+    } entry;
+
+    auto& c_class() { return entry.current_class; }
+    auto& c_section() { return entry.current_section; }
+    auto& c_iteration() { return entry.current_iteration_values; }
+
+public:
+    lex_parser(const std::string& lex_file, output& out = output("lex_parser")) 
+        : out(out), _lex_file(lex_file), _index() {}
 
     void display_toc() {
         out("--- Table of content ---");
@@ -89,41 +102,128 @@ public:
 
     }
 
+    void init() {
+        std::ifstream file(_lex_file, std::ios::binary);
+
+        if (!file.is_open()) {
+            out.err("Error opening file: ", _lex_file);
+            exit(-1);
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string content = buffer.str();
+
+        normalize_dashes(content);
+
+        size_t start = 0, end;
+        while ((end = content.find('\n', start)) != std::string::npos) {
+            std::string line = content.substr(start, end - start);
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+
+            _lines.emplace_back(line);
+            start = end + 1;
+        }
+
+        if (start < content.size()) {
+            std::string line = content.substr(start);
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            _lines.emplace_back(line);
+        }
+    }
+
+    void extract_indices() {
+        auto& [row, cline, _] = c_iteration();
+        row = 0;
+
+        std::smatch match;
+        std::vector<std::string> entry_lines;
+        bool extracting_entry = false;
+        for (const auto& line : _lines) {
+            row++;
+            cline = line;
+            
+
+            if (match_class()) {
+                if (extracting_entry) extract_entry(entry_lines);
+
+                extracting_entry = false;
+                extract_class();
+            }
+            else if (match_section()) {
+                if (extracting_entry) extract_entry(entry_lines);
+
+                extracting_entry = false;
+                extract_section();
+            }
+            else if (match_entry_header()) {
+                if (extracting_entry) extract_entry(entry_lines);
+
+                extracting_entry = false;
+                extract_entry_header();
+            }
+            else if (extracting_entry || match_entry()) {
+                extracting_entry = true;
+                entry_lines.emplace_back(cline);
+            }
+        }
+
+        entry = { };
+    }
+
 private:
     output& out;
 
+    std::string _lex_file;
     lex_class_index _index;
     lex_verbs_index _verbs;
     std::unordered_map<std::string, std::string> _entry_headers;
 
-    std::ifstream _ifs;
+    std::istringstream _iss;
+    std::vector<std::string> _lines;
 
-    struct {
-        struct {
-            std::string current_class;
-            std::string current_description;
-            int class_start_row = 0;
-        } current_class;
+    void normalize_dashes(std::string& str) {
+        static const std::vector<std::string> dashes = {
+            "\xE2\x80\x93", // ‚Äì EN DASH
+            "\xE2\x80\x94", // ‚Äî EM DASH
+            "\xE2\x80\x95", // ‚Äê HORIZONTAL BAR
+            "\xE2\x88\x92"  // ‚àí MINUS SIGN
+        };
+        static const std::string dash_chars = "\u2013\u2014\u2212\u2012\u2011";
 
-        struct {
-            std::string section_number;
-            std::string section_name;
-            int section_start_row = 0;
-        } current_section;
+        std::string result;
+        result.reserve(str.size());
 
-        struct {
-            int current_row = 0;
-            std::string line;
-            std::smatch match;
-        } current_iteration_values;
-    } entry;
+        for (size_t i = 0; i < str.size();) {
+            unsigned char c = static_cast<unsigned char>(str[i]);
 
-    auto& c_class() { return entry.current_class; }
-    auto& c_section() { return entry.current_section; }
-    auto& c_iteration() { return entry.current_iteration_values; }
+            if (c < 0x80) {
+                result += str[i++];
+            }
+            else {
+                if (str.compare(i, 3, "\xE2\x80\x93") == 0 ||
+                    str.compare(i, 3, "\xE2\x80\x94") == 0 ||
+                    str.compare(i, 3, "\xE2\x88\x92") == 0 ||
+                    str.compare(i, 3, "\xE2\x80\x92") == 0 ||
+                    str.compare(i, 3, "\xE2\x80\x91") == 0) {
+                    result += '-';
+                    i += 3;
+                }
+                else {
+                    result += str[i++];
+                }
+            }
+        }
+        
+        str = std::move(result);
+    }
 
     bool next_line() {
-        if (std::getline(_ifs, entry.current_iteration_values.line)) {
+        if (std::getline(_iss, entry.current_iteration_values.line)) {
             c_iteration().current_row++;
             return true;
         }
@@ -131,18 +231,30 @@ private:
     }
 
     std::string peek_next_line() {
-        std::streampos current_pos = _ifs.tellg();
+        std::streampos current_pos = _iss.tellg();
 
         std::string next;
-        if (std::getline(_ifs, next)) {
-            _ifs.seekg(current_pos);
+        if (std::getline(_iss, next)) {
+            _iss.seekg(current_pos);
         }
         else {
-            _ifs.clear();
-            _ifs.seekg(current_pos);
+            _iss.clear();
+            _iss.seekg(current_pos);
         }
 
         return next;
+    }
+
+    std::string peek_next_line(int line) {
+        const std::string& current_line = _lines[line];
+        const std::string* next_line = (line + 1 < _lines.size()) ? &_lines[line + 1] : nullptr;
+
+        if (next_line) {
+            return *next_line;
+        }
+        else {
+            return "";
+        }
     }
 
     void extract_class() {
@@ -220,25 +332,52 @@ private:
         _verbs[pos].push_back(std::move(entry));
     }
 
-    void extract_indices() {
-        c_iteration().current_row = 0;
+    void extract_entry(std::vector<std::string>& lines) {
+        if (lines.empty()) return;
 
-        while (next_line()) {
-            if (match_class()) {
-                extract_class();
-            } 
-            else if (match_section()) {
-                extract_section();
+        std::smatch match;
+        const std::string& heading = lines[0];
+        if (std::regex_match(heading, match, std::regex(R"(^(\d+)\.\s+(.+?)(?:\s*[-‚Äî]\s*([A-Za-z\.]+))?$)"))) {
+            std::string entry_number = match[1];
+            std::string entry_name = match[2];
+            std::string pos = match[3];
+
+            entry_name = clean_name(entry_name);
+
+            std::vector<std::string> terms;
+            for (size_t i = 1; i < lines.size(); ++i) {
+                std::string line = lines[i];
+
+                //auto semicolon_pos = line.find(';');
+                //if (semicolon_pos != std::string::npos) {
+                //    line = line.substr(0, semicolon_pos);
+                //}
+                line = clean_term_annotations(line);
+
+                std::istringstream iss(line);
+                std::string term;
+                while (std::getline(iss, term, ',')) {
+                    trim(term);
+                    if (!term.empty()) {
+                        terms.emplace_back(term);
+                    }
+                }
             }
-            else if (match_entry_header()) {
-                extract_entry_header();
-            }
-            else if (match_entry()) {
-                extract_entry();
-            }
+            
+            lex_entry entry = {
+                entry_number,
+                entry_name,
+                pos,
+                terms
+            };
+
+            auto& cls = _index[c_class().current_class];
+            auto& section = cls.sections[c_section().section_number];
+            section.entries.push_back(entry);
+
+            _verbs[pos].push_back(std::move(entry));
+            lines.clear();
         }
-
-        entry = { };
     }
 
     bool match_class() {
@@ -259,12 +398,12 @@ private:
 
     bool match_pat(const std::regex& pattern) {
         auto& [_, line, match] = c_iteration();
-        return std::regex_match(line, match, pattern);
-        /*if (!std::regex_match(line, match, pattern)) {
+        //return std::regex_match(line, match, pattern);
+        if (!std::regex_match(line, match, pattern)) {
             out("Regex \"", pattern_map[&pattern], "\" did not match line \"", line, "\"");
             return false;
         }
-        return true;*/
+        return true;
     }
 
     template<size_t N>
@@ -275,5 +414,31 @@ private:
             return false;
         }
         return true;
+    }
+
+    std::string clean_name(const std::string& name) {
+        std::string cleaned_name = name;
+        
+        cleaned_name.erase(std::remove(cleaned_name.begin(), cleaned_name.end(), ','), cleaned_name.end());
+
+        auto pos = cleaned_name.find('[');
+        if (pos != std::string::npos) {
+            cleaned_name = cleaned_name.substr(0, pos);
+        }
+
+        return cleaned_name;
+    }
+
+    std::string clean_term_annotations(const std::string& term) {
+        std::string cleaned_term = term;
+
+        for (const auto& pair : cleaning_regex) {
+            const std::regex& reg = pair.first;
+            const std::string& rep = pair.second;
+            cleaned_term = std::regex_replace(cleaned_term, reg, rep);
+        }
+
+        trim(cleaned_term);
+        return cleaned_term;
     }
 };

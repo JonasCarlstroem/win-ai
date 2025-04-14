@@ -7,8 +7,8 @@
 #include <regex>
 #include <set>
 #include <filesystem>
-#include "lib/util.h"
-#include "lib/wgen/lex_parser.h"
+#include "../util.h"
+#include "lex_parser.h"
 
 namespace fs = std::filesystem;
 
@@ -24,6 +24,9 @@ int main() {
     }
 
     lex_parser parser("thesaurus.txt", out);
+    parser.init();
+
+    parser.extract_indices();
     parser.display_toc();
 
     parser.display_section(1);
