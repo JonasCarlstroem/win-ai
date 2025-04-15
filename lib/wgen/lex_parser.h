@@ -7,33 +7,8 @@
 #include <fstream>
 #include <set>
 #include <regex>
-#include "../util.h"
+#include "lex_util.h"
 #include "lex_types.h"
-
-#define _REG(name, pattern)                       \
-const auto& PATTERN_##name = ##pattern;           \
-const std::regex REG_##name(PATTERN_##name);
-
-_REG(CLASS, R"(CLASS\s+([IVXLCDM]+))");
-_REG(SECTION, R"(SECTION\s+([IVXLCDM]+)\.)");
-_REG(ENTRY_HEADER, R"(^(\d+)\.\s+[A-Z][A-Z, ]+$)");
-//_REG(ENTRY, R"((\d+)\.\s+(.*?)\s*-\s*([A-Z]+\.?))");
-_REG(ENTRY, R"((\d+)\.\s+(.*?)(?:\s*-\s*([A-Z]+\.?))?)");
-//_REG(ENTRY, R"((\d*)\.\s*(.*?)(?:\s*-\s*([A-Z]+\.?))?)");
-//_REG(ENTRY, R"((?:(\d+)\.\s+)?([\w\-']+)(?:\s*-\s*([A-Z]+\.?))?)");
-
-std::unordered_map<const std::regex*, const char*> pattern_map = {
-    { &REG_CLASS, PATTERN_CLASS },
-    { &REG_SECTION, PATTERN_SECTION },
-    { &REG_ENTRY_HEADER, PATTERN_ENTRY_HEADER },
-    { &REG_ENTRY, PATTERN_ENTRY }
-};
-
-const std::vector<std::pair<std::regex, std::string>> cleaning_regex = {
-    { std::regex(R"(\[.*?\])"), "" },
-    { std::regex(R"(&c)"), "" },
-    { std::regex(R"(\s*;\s*)"), "," }
-};
 
 class lex_parser {
 private:
@@ -74,7 +49,10 @@ public:
             out(lc.name, " - ", lc.description, " (Row: ", lc.start_row, ")");
             for (const auto& pair : index.second.sections) {
                 const auto& section = pair.second;
-                out("\t", section.number, ": ", section.name, " (Row: ", section.start_row, ")");
+                out("\t", 
+                    section.number, ": ", section.name, 
+                    " (Row: ", section.start_row, ")",
+                    " (Entries: ", section.entries.size(), ")");
             }
             out("");
         }
@@ -87,7 +65,8 @@ public:
             if (it != lex_cls.sections.end()) {
                 const auto& section = it->second;
 
-                out("--- Section ", section.number, ": ", section.name, " ---");
+                int sec_num = roman_to_int(section.number);
+                out("--- Section ", sec_num, ": ", section.name, " ---");
                 for (const auto& entry : section.entries) {
                     out(entry.number, ". ", join(entry.terms, ", "), " [", entry.pos, "]");
                 }
@@ -143,22 +122,21 @@ public:
         std::smatch match;
         std::vector<std::string> entry_lines;
         bool extracting_entry = false;
-        for (const auto& line : _lines) {
+        for(size_t i = 0; i < _lines.size(); ++i) {
             row++;
-            cline = line;
-            
+            cline = _lines[i];
 
             if (match_class()) {
                 if (extracting_entry) extract_entry(entry_lines);
 
                 extracting_entry = false;
-                extract_class();
+                extract_class(i);
             }
             else if (match_section()) {
                 if (extracting_entry) extract_entry(entry_lines);
 
                 extracting_entry = false;
-                extract_section();
+                extract_section(i);
             }
             else if (match_entry_header()) {
                 if (extracting_entry) extract_entry(entry_lines);
@@ -257,12 +235,12 @@ private:
         }
     }
 
-    void extract_class() {
+    void extract_class(int line_num) {
         auto& [cls_name, cls_desc, cls_row] = c_class();
 
         cls_row = c_iteration().current_row;
         cls_name = c_iteration().line;
-        cls_desc = peek_next_line();
+        cls_desc = peek_next_line(line_num);
 
         lex_class class_entry = {
             cls_name,
@@ -274,18 +252,19 @@ private:
         _index[class_entry.name] = class_entry;
     }
 
-    void extract_section() {
+    void extract_section(int line_num) {
         auto& [sec_num, sec_name, sec_row] = c_section();
         auto& [cls_name, cls_desc, cls_row] = c_class();
         auto [current_row, line, match] = c_iteration();
 
         sec_row = c_iteration().current_row;
         sec_num = c_iteration().match[1];
-        sec_name = peek_next_line();
+        sec_name = peek_next_line(line_num);
 
         lex_section section = {
             sec_num,
             sec_name,
+            {},
             {},
             sec_row
         };
@@ -299,8 +278,6 @@ private:
         std::string header_text = line;
 
         _entry_headers[std::move(header_number)] = std::move(header_text);
-
-        out("Header: ", line, " at row ", row);
     }
 
     void extract_entry() {
@@ -333,34 +310,59 @@ private:
     }
 
     void extract_entry(std::vector<std::string>& lines) {
+        //static const std::regex splitter_regex(R"(([^,;\.]+))");
+        //static const std::regex num_filter_regex(R"(\d+)");
+        /*static const std::regex heading_regex(R"(^(\d+)\.\s+([^\—\-]+)\s*[—\-]\s*([A-Za-z\.]+)\.?\s*)");*/
+        /*static const std::regex heading_regex(R"(^(\d+)\.\s*(?:\[[^\]]*\]\.\s*)?([^\—\-]+)\s*[—\-]\s*([A-Za-z\.]+)\.?)");*/
+        //static const std::regex heading_regex(R"(^(\d+)\.\s*(?:\[[^\]]*\]\.\s*)?(.+?)\s*[—\-]\s*([A-Za-z\.]+)\.?)");
+        /*static const std::regex remove_nums_regex(R"(\b\d+\b)");
+        static const std::regex remove_pos_regex(R"(\b(?:adj|adv|n|v)\b\.?)", std::regex_constants::icase);*/
+
         if (lines.empty()) return;
+
+        auto sec_name = c_section().section_name;
+        if (sec_name == "POSSESSIVE RELATIONS" || sec_name == "PERSONAL AFFECTIONS") {
+            out("DEBUG");
+        }
 
         std::smatch match;
         const std::string& heading = lines[0];
-        if (std::regex_match(heading, match, std::regex(R"(^(\d+)\.\s+(.+?)(?:\s*[-—]\s*([A-Za-z\.]+))?$)"))) {
+        
+        if (std::regex_search(heading, match, REG_HEADING)) {
             std::string entry_number = match[1];
-            std::string entry_name = match[2];
+            std::string entry_name = clean_name(match[2]);
             std::string pos = match[3];
 
-            entry_name = clean_name(entry_name);
+            std::string raw_text;
+            for (size_t i = 0; i < lines.size(); ++i) {
+                raw_text += lines[i];
+                raw_text += ' ';
+            }
+
+            raw_text = raw_text.substr(match[0].length());
+            raw_text = clean_term_annotations(raw_text);
+
+            for (const auto& [pat, rep] : replace_match) {
+                raw_text = std::regex_replace(raw_text, pat, rep);
+            }
 
             std::vector<std::string> terms;
-            for (size_t i = 1; i < lines.size(); ++i) {
-                std::string line = lines[i];
+            auto words_begin = std::sregex_iterator(raw_text.begin(), raw_text.end(), REG_SPLITTER);
+            auto words_end = std::sregex_iterator();
 
-                //auto semicolon_pos = line.find(';');
-                //if (semicolon_pos != std::string::npos) {
-                //    line = line.substr(0, semicolon_pos);
-                //}
-                line = clean_term_annotations(line);
+            for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+                std::string term = i->str();
+                trim(term);
 
-                std::istringstream iss(line);
-                std::string term;
-                while (std::getline(iss, term, ',')) {
-                    trim(term);
-                    if (!term.empty()) {
-                        terms.emplace_back(term);
-                    }
+                term = REPLACE(term, REG_NUM_REMOVE, "");
+                term = REPLACE(term, REG_POS_REMOVE, "");
+
+                trim(term);
+
+                IF_MATCH(term, REG_NUM_FILTER) continue;
+
+                if (NOT_EMPTY(term)) {
+                    terms.emplace_back(term);
                 }
             }
             
@@ -376,8 +378,9 @@ private:
             section.entries.push_back(entry);
 
             _verbs[pos].push_back(std::move(entry));
-            lines.clear();
         }
+
+        lines.clear();
     }
 
     bool match_class() {
@@ -398,12 +401,12 @@ private:
 
     bool match_pat(const std::regex& pattern) {
         auto& [_, line, match] = c_iteration();
-        //return std::regex_match(line, match, pattern);
-        if (!std::regex_match(line, match, pattern)) {
+        return std::regex_match(line, match, pattern);
+        /*if (!std::regex_match(line, match, pattern)) {
             out("Regex \"", pattern_map[&pattern], "\" did not match line \"", line, "\"");
             return false;
         }
-        return true;
+        return true;*/
     }
 
     template<size_t N>
@@ -432,7 +435,7 @@ private:
     std::string clean_term_annotations(const std::string& term) {
         std::string cleaned_term = term;
 
-        for (const auto& pair : cleaning_regex) {
+        for (const auto& pair : cleaning_match) {
             const std::regex& reg = pair.first;
             const std::string& rep = pair.second;
             cleaned_term = std::regex_replace(cleaned_term, reg, rep);

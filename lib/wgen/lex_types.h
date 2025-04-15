@@ -16,6 +16,7 @@ struct lex_section {
     std::string number;
     std::string name;
     std::vector<lex_entry> entries;
+    std::vector<lex_section> sub_sections;
 
     int start_row;
 };
