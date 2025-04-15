@@ -9,9 +9,70 @@
 #include <regex>
 #include "lex_util.h"
 #include "lex_types.h"
+#include "../timer.h"
+
+struct _time {
+    size_t row;
+    double seconds;
+};
+
+struct timer_data {
+    std::vector<_time> match_time{};
+    std::vector<_time> extract_class_time{};
+    std::vector<_time> extract_section_time{};
+    std::vector<_time> extract_entry_header_time{};
+    std::vector<_time> extract_entry_time{};
+
+    double total_class_time() const {
+        double total = 0;
+        for (const auto& it : extract_class_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_section_time() const {
+        double total = 0;
+        for (const auto& it : extract_section_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_entry_header_time() const {
+        double total = 0;
+        for (const auto& it : extract_entry_header_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_entry_time() const {
+        double total = 0;
+        for (const auto& it : extract_entry_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+} time_data;
 
 class lex_parser {
 private:
+    output& out;
+    timer _timer;
+
+    std::string _lex_file;
+    lex_class_index _index;
+    lex_verbs_index _verbs;
+    std::unordered_map<std::string, std::string> _entry_headers;
+
+    std::istringstream _iss;
+    std::vector<std::string> _lines;
+
     struct {
         struct {
             std::string current_class;
@@ -26,7 +87,7 @@ private:
         } current_section;
 
         struct {
-            int current_row = 0;
+            size_t current_row = 0;
             std::string line;
             std::smatch match;
         } current_iteration_values;
@@ -38,7 +99,7 @@ private:
 
 public:
     lex_parser(const std::string& lex_file, output& out = output("lex_parser")) 
-        : out(out), _lex_file(lex_file), _index() {}
+        : out(out), _timer(), _lex_file(lex_file), _index() {}
 
     void display_toc() {
         out("--- Table of content ---");
@@ -102,7 +163,8 @@ public:
                 line.pop_back();
             }
 
-            _lines.emplace_back(line);
+            if(!line.empty() && line.size() > 1)
+                _lines.emplace_back(line);
             start = end + 1;
         }
 
@@ -122,10 +184,13 @@ public:
         std::smatch match;
         std::vector<std::string> entry_lines;
         bool extracting_entry = false;
+        timer extract_timer("Extract Indices Timer");
+        extract_timer.start();
         for(size_t i = 0; i < _lines.size(); ++i) {
-            row++;
+            row = i;
             cline = _lines[i];
 
+            find_matches_timer.start();
             if (match_class()) {
                 if (extracting_entry) extract_entry(entry_lines);
 
@@ -148,65 +213,31 @@ public:
                 extracting_entry = true;
                 entry_lines.emplace_back(cline);
             }
+            find_matches_timer.stop();
+            time_data.match_time.emplace_back(_time{ i, find_matches_timer.elapsed_seconds() });
+            find_matches_timer.reset();
         }
+        extract_timer.stop();
+        extract_timer.display_elapsed_seconds("Extracted all indices in ");
+
+        out("Total time extracting classes: ", time_data.total_class_time(), "\n",
+            "Total time extracting sections: ", time_data.total_section_time(), "\n",
+            "Total time extracting entry headers: ", time_data.total_entry_header_time(), "\n",
+            "Total time extracting entries: ", time_data.total_entry_time());
 
         entry = { };
     }
 
 private:
-    output& out;
-
-    std::string _lex_file;
-    lex_class_index _index;
-    lex_verbs_index _verbs;
-    std::unordered_map<std::string, std::string> _entry_headers;
-
-    std::istringstream _iss;
-    std::vector<std::string> _lines;
-
-    void normalize_dashes(std::string& str) {
-        static const std::vector<std::string> dashes = {
-            "\xE2\x80\x93", // – EN DASH
-            "\xE2\x80\x94", // — EM DASH
-            "\xE2\x80\x95", // ‐ HORIZONTAL BAR
-            "\xE2\x88\x92"  // − MINUS SIGN
-        };
-        static const std::string dash_chars = "\u2013\u2014\u2212\u2012\u2011";
-
-        std::string result;
-        result.reserve(str.size());
-
-        for (size_t i = 0; i < str.size();) {
-            unsigned char c = static_cast<unsigned char>(str[i]);
-
-            if (c < 0x80) {
-                result += str[i++];
-            }
-            else {
-                if (str.compare(i, 3, "\xE2\x80\x93") == 0 ||
-                    str.compare(i, 3, "\xE2\x80\x94") == 0 ||
-                    str.compare(i, 3, "\xE2\x88\x92") == 0 ||
-                    str.compare(i, 3, "\xE2\x80\x92") == 0 ||
-                    str.compare(i, 3, "\xE2\x80\x91") == 0) {
-                    result += '-';
-                    i += 3;
-                }
-                else {
-                    result += str[i++];
-                }
-            }
-        }
-        
-        str = std::move(result);
-    }
-
-    bool next_line() {
-        if (std::getline(_iss, entry.current_iteration_values.line)) {
-            c_iteration().current_row++;
-            return true;
-        }
-        return false;
-    }
+    timer find_matches_timer{ "Matches" };
+    timer match_class_timer{ "Match Class" };
+    timer match_section_timer{ "Match Section" };
+    timer match_entry_header_timer{ "Match Entry Header" };
+    timer match_entry_timer{ "Match Entry" };
+    timer extract_class_timer{ "Extract Class" };
+    timer extract_section_timer{ "Extract Section" };
+    timer extract_entry_header_timer{ "Extract Entry Header" };
+    timer extract_entry_timer{ "Extract Entry" };
 
     std::string peek_next_line() {
         std::streampos current_pos = _iss.tellg();
@@ -223,7 +254,7 @@ private:
         return next;
     }
 
-    std::string peek_next_line(int line) {
+    std::string peek_next_line(size_t line) {
         const std::string& current_line = _lines[line];
         const std::string* next_line = (line + 1 < _lines.size()) ? &_lines[line + 1] : nullptr;
 
@@ -235,7 +266,8 @@ private:
         }
     }
 
-    void extract_class(int line_num) {
+    void extract_class(size_t line_num) {
+        extract_class_timer.start();
         auto& [cls_name, cls_desc, cls_row] = c_class();
 
         cls_row = c_iteration().current_row;
@@ -249,13 +281,16 @@ private:
             cls_row
         };
 
-        _index[class_entry.name] = class_entry;
+        CURRENT_CLASS = std::move(class_entry);
+        extract_class_timer.stop();
+        time_data.extract_class_time.emplace_back(_time{ line_num, extract_class_timer.elapsed_seconds() });
+        extract_class_timer.reset();
     }
 
-    void extract_section(int line_num) {
+    void extract_section(size_t line_num) {
+        extract_section_timer.start();
         auto& [sec_num, sec_name, sec_row] = c_section();
         auto& [cls_name, cls_desc, cls_row] = c_class();
-        auto [current_row, line, match] = c_iteration();
 
         sec_row = c_iteration().current_row;
         sec_num = c_iteration().match[1];
@@ -269,15 +304,23 @@ private:
             sec_row
         };
 
-        _index[cls_name].sections[section.number] = std::move(section);
+        CURRENT_SECTION = std::move(section);
+        extract_section_timer.stop();
+        time_data.extract_section_time.emplace_back(_time{ line_num, extract_section_timer.elapsed_seconds() });
+        extract_section_timer.reset();
     }
 
     void extract_entry_header() {
+        extract_entry_header_timer.start();
         auto [row, line, _] = c_iteration();
         std::string header_number = line.substr(0, line.find('.'));
         std::string header_text = line;
 
         _entry_headers[std::move(header_number)] = std::move(header_text);
+
+        extract_entry_header_timer.stop();
+        time_data.extract_entry_header_time.emplace_back(_time{ row, extract_entry_header_timer.elapsed_seconds() });
+        extract_entry_header_timer.reset();
     }
 
     void extract_entry() {
@@ -290,7 +333,7 @@ private:
         std::vector<std::string> terms = split(entry_terms_raw, ',');
 
         for (auto& term : terms) {
-            term = trim(term);
+            trim(term);
         }
 
         out("Entry: ", entry_number, " | POS: ", pos, " | Terms: ", join(terms, ", "));
@@ -310,14 +353,7 @@ private:
     }
 
     void extract_entry(std::vector<std::string>& lines) {
-        //static const std::regex splitter_regex(R"(([^,;\.]+))");
-        //static const std::regex num_filter_regex(R"(\d+)");
-        /*static const std::regex heading_regex(R"(^(\d+)\.\s+([^\—\-]+)\s*[—\-]\s*([A-Za-z\.]+)\.?\s*)");*/
-        /*static const std::regex heading_regex(R"(^(\d+)\.\s*(?:\[[^\]]*\]\.\s*)?([^\—\-]+)\s*[—\-]\s*([A-Za-z\.]+)\.?)");*/
-        //static const std::regex heading_regex(R"(^(\d+)\.\s*(?:\[[^\]]*\]\.\s*)?(.+?)\s*[—\-]\s*([A-Za-z\.]+)\.?)");
-        /*static const std::regex remove_nums_regex(R"(\b\d+\b)");
-        static const std::regex remove_pos_regex(R"(\b(?:adj|adv|n|v)\b\.?)", std::regex_constants::icase);*/
-
+        extract_entry_timer.start();
         if (lines.empty()) return;
 
         auto sec_name = c_section().section_name;
@@ -327,15 +363,21 @@ private:
 
         std::smatch match;
         const std::string& heading = lines[0];
-        
+
         if (std::regex_search(heading, match, REG_HEADING)) {
             std::string entry_number = match[1];
             std::string entry_name = clean_name(match[2]);
             std::string pos = match[3];
 
             std::string raw_text;
-            for (size_t i = 0; i < lines.size(); ++i) {
-                raw_text += lines[i];
+            size_t total_size = 0;
+            for (const auto& line : lines) {
+                total_size += line.size() + 1;
+            }
+            raw_text.reserve(total_size);
+
+            for(const auto& line : lines) {
+                raw_text += line;
                 raw_text += ' ';
             }
 
@@ -373,14 +415,14 @@ private:
                 terms
             };
 
-            auto& cls = _index[c_class().current_class];
-            auto& section = cls.sections[c_section().section_number];
-            section.entries.push_back(entry);
-
-            _verbs[pos].push_back(std::move(entry));
+            CURRENT_SECTION.entries.emplace_back(entry);
+            _verbs[pos].emplace_back(std::move(entry));
         }
 
         lines.clear();
+        extract_entry_timer.stop();
+        time_data.extract_entry_time.emplace_back(_time{ c_iteration().current_row, extract_entry_timer.elapsed_seconds() });
+        extract_entry_timer.reset();
     }
 
     bool match_class() {
@@ -401,12 +443,7 @@ private:
 
     bool match_pat(const std::regex& pattern) {
         auto& [_, line, match] = c_iteration();
-        return std::regex_match(line, match, pattern);
-        /*if (!std::regex_match(line, match, pattern)) {
-            out("Regex \"", pattern_map[&pattern], "\" did not match line \"", line, "\"");
-            return false;
-        }
-        return true;*/
+        return MATCH(line, match, pattern);
     }
 
     template<size_t N>
