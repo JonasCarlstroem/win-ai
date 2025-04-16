@@ -11,6 +11,7 @@ if(MSVC)
 	add_compile_options(/bigobj)
 endif()
 
+add_subdirectory("lib/thread")
 add_subdirectory("lib/wgen")
 
 file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
@@ -23,6 +24,12 @@ set(INTENTS_SRC_DIR "${CMAKE_SOURCE_DIR}/lib/intents")
 
 message(STATUS "INTENTS_OUT_DIR=${INTENTS_OUT_DIR}")
 message(STATUS "INTENTS_SRC_DIR=${INTENTS_SRC_DIR}")
+
+target_link_libraries(wgen
+		INTERFACE thread)
+
+target_include_directories(wgen PRIVATE
+		${CMAKE_SOURCE_DIR}/lib/thread)
 
 add_custom_command(TARGET trainer PRE_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove_directory ${INTENTS_OUT_DIR}

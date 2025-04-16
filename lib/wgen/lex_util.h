@@ -26,7 +26,9 @@ std::regex_replace(##term, ##pattern, ##rep_char)
 #define IF_MATCH(term, pattern)                                 \
 if(std::regex_match(##term, ##pattern))
 
-#define MATCH(line, match, pattern) std::regex_match(##line, ##match, ##pattern);
+#define IS_MATCH(term, pattern) std::regex_match(##term, ##pattern)
+
+#define MATCH(line, match, pattern) std::regex_match(##line, ##match, ##pattern)
 
 ///Only works with strings
 #define EMPTY(term) (##term.empty() && ##term.length() <= 1)

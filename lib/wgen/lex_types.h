@@ -10,6 +10,8 @@ struct lex_entry {
     //std::string raw_line;
     std::string pos;
     std::vector<std::string> terms;
+
+    size_t start_row;
 };
 
 struct lex_section {
@@ -18,7 +20,7 @@ struct lex_section {
     std::vector<lex_entry> entries;
     std::vector<lex_section> sub_sections;
 
-    int start_row;
+    size_t start_row;
 };
 
 typedef std::unordered_map<std::string, lex_section> lex_section_index;
@@ -28,7 +30,7 @@ struct lex_class {
     std::string description;
     lex_section_index sections;
 
-    int start_row;
+    size_t start_row;
 };
 
 typedef std::unordered_map<std::string, lex_class> lex_class_index;

@@ -26,7 +26,8 @@ int main() {
     lex_parser parser("thesaurus.txt", out);
     parser.init();
 
-    parser.extract_indices();
+    //parser.extract_indices();
+    parser.extract_indices2();
     parser.display_toc();
 
     parser.display_section(1);
