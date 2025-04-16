@@ -195,7 +195,7 @@ public:
         for (size_t i = 0; i < _lines.size(); ++i) {
             if(IS_MATCH(_lines[i], REG_CLASS)) {
                 class_range.start = i++;
-                class_range.end = get_end<false>(i, REG_CLASS);
+                class_range.end = get_end(i, REG_CLASS);
 
 #ifdef DEBUG_THREADS
                 lex_class cls = extract_class(class_range);
@@ -307,39 +307,42 @@ private:
     }
 
     template<bool condition = true>
-    size_t get_end(size_t start, std::vector<const std::regex>& patterns) {
+    size_t get_end(size_t start, const std::vector<std::regex>& patterns) {
         size_t end = start;
         for (; end < _lines.size(); ++end) {
             for (const auto& pattern : patterns) {
                 if (IS_MATCH(_lines[end], pattern) != condition) {
                     while (_lines[end - 1].empty()) --end;
-                    break;
+                    return end;
                 }
             }
-            //IF_MATCH(_lines[i], pattern) {
-            //    while (_lines[i - 1].empty()) --i;
-            //    return i - 1;
-            //}
         }
 
         return end - 1;
     }
 
-    //size_t get_section_entry_end(size_t start) {
-    //    for(size_t i = start; i < )
-    //}
+    size_t get_end(size_t start, const std::regex& pattern) {
+        for (size_t i = start; i < _lines.size(); ++i) {
+            IF_MATCH(_lines[i], pattern) {
+                while (_lines[i - 1].empty()) --i;
+                return i - 1;
+            }
+        }
+
+        return -1;
+    }
 
     lex_class extract_class(line_range range) {
         lex_class result;
         result.name = _lines[range.start];
+        result.description = peek_next_line(range.start);
 
         std::vector<std::future<lex_section>> section_futures;
-
         line_range section_range;
         for (size_t i = range.start; i < range.end; ++i) {
             if(IS_MATCH(_lines[i], REG_SECTION)) {
                 section_range.start = i++;
-                section_range.end = get_end<false>(i, REG_SECTION);
+                section_range.end = get_end(i, REG_SECTION);
                 /*section_range.end = get_end(i + 1, REG_SECTION);*/
                 
 #ifdef DEBUG_THREADS
@@ -387,29 +390,25 @@ private:
     }
 
     lex_section extract_section(line_range range) {
+        static const std::vector<std::regex> end_patterns = {
+            REG_CLASS,
+            REG_SECTION,
+            REG_ENTRY_HEADER
+        };
+
         lex_section result;
-        result.name = _lines[range.start];
+        result.number = _lines[range.start];
+        result.name = peek_next_line(range.start);
 
         std::vector<std::future<lex_entry>> entry_futures;
         line_range entry_range;
         for (size_t i = range.start; i < range.end; ++i) {
             if(IS_MATCH(_lines[i], REG_ENTRY_HEADER)) {
                 entry_range.start = i++;
-
-                for (size_t j = entry_range.start; j < range.end; ++j) {
-                    if (IS_MATCH(_lines[j], REG_CLASS)) {
-                    }
-                    else if (IS_MATCH(_lines[j], REG_SECTION)) {
-
-                    }
-                    else if (IS_MATCH(_lines[j], REG_ENTRY_HEADER)) {
-
-                    }
-                }
-                entry_range.end = get_end<true>(i, REG_ENTRY);
+                entry_range.end = get_end<false>(i, end_patterns);
 
 #ifdef DEBUG_THREADS
-                lex_entry entry = extract_entry(_lines[i], result.name);
+                lex_entry entry = extract_entry(entry_range, result.name);
                 result.entries.push_back(entry);
 #else
                 entry_futures.push_back(_pool.enqueue([&, entry_range] {
@@ -466,8 +465,25 @@ private:
         extract_entry_header_timer.reset();
     }
 
-    lex_entry extract_entry(const std::string& line, const std::string& section_name) {
+    lex_entry extract_entry(line_range range, const std::string& section_name) {
         lex_entry result;
+        const std::string& heading = _lines[range.start];
+
+        std::smatch match;
+        if (std::regex_search(heading, match, REG_HEADING)) {
+            std::string entry_num = match[1];
+            std::string entry_name = clean_name(match[2]);
+            std::string pos = match[3];
+
+            std::string raw_text;
+            size_t total_size = 0;
+            vector<std::string>::const_iterator first = _lines.begin() + range.start;
+            vector<std::string>::const_iterator last = _lines.begin() + range.end;
+
+            while (first < last) {
+
+            }
+        }
         return result;
     }
 
