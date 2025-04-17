@@ -12,7 +12,10 @@
 #include "../timer.h"
 #include "thread_pool.h"
 
-#define DEBUG_THREADS
+#undef DEBUG_THREADS
+
+#ifdef PROFILING && _defined(TIMER)
+#endif
 
 struct _time {
     size_t row;
@@ -192,17 +195,27 @@ public:
 
         std::smatch match;
         line_range class_range;
+
+        TIMER_START(extraction, "Index Timer");
+        TIMER_OUT(extraction, "Extracting indices...");
+
         for (size_t i = 0; i < _lines.size(); ++i) {
-            if(IS_MATCH(_lines[i], REG_CLASS)) {
+            int search_result = search_any(_lines[i], match, REG_CLASS);
+            //if(MATCH(_lines[i], match, REG_CLASS))
+            if(search_result > 0) {
                 class_range.start = i++;
                 class_range.end = get_end(i, REG_CLASS);
 
+                if (class_range.end == (size_t)-1) {
+                    class_range.end = _lines.size() - 1;
+                }
+
 #ifdef DEBUG_THREADS
-                lex_class cls = extract_class(class_range);
+                lex_class cls = extract_class(class_range, match);
                 classes.push_back(cls);
 #else
-                class_futures.push_back(_pool.enqueue([&, class_range] {
-                    return extract_class(class_range);
+                class_futures.push_back(_pool.enqueue([&, class_range, match] {
+                    return extract_class(class_range, match);
                 }));
 #endif 
 
@@ -212,9 +225,16 @@ public:
 
 #ifndef DEBUG_THREADS
         for (auto& f : class_futures) {
+            f.wait();
+        }
+
+        for (auto& f : class_futures) {
             classes.push_back(f.get());
         }
 #endif
+
+        TIMER_STOP(extraction);
+        TIMER_OUT(extraction, "Extracted indices in ");
     }
 
     void extract_indices() {
@@ -224,8 +244,9 @@ public:
         std::smatch match;
         std::vector<std::string> entry_lines;
         bool extracting_entry = false;
-        timer extract_timer("Extract Indices Timer");
-        extract_timer.start();
+
+        TIMER_START(extract_timer, "Extract Indices Timer");
+
         for(size_t i = 0; i < _lines.size(); ++i) {
             row = i;
             cline = _lines[i];
@@ -257,8 +278,8 @@ public:
             time_data.match_time.emplace_back(_time{ i, find_matches_timer.elapsed_seconds() });
             find_matches_timer.reset();
         }
-        extract_timer.stop();
-        extract_timer.display_elapsed_seconds("Extracted all indices in ");
+
+        TIMER_STOP(extract_timer, "Extracted all indices in ");
 
         out("Total time extracting classes: ", time_data.total_class_time(), "\n",
             "Total time extracting sections: ", time_data.total_section_time(), "\n",
@@ -308,17 +329,16 @@ private:
 
     template<bool condition = true>
     size_t get_end(size_t start, const std::vector<std::regex>& patterns) {
-        size_t end = start;
-        for (; end < _lines.size(); ++end) {
+        for (size_t end = start; end < _lines.size(); ++end) {
             for (const auto& pattern : patterns) {
-                if (IS_MATCH(_lines[end], pattern) != condition) {
+                if (SEARCH(_lines[end], pattern) == condition) {
                     while (_lines[end - 1].empty()) --end;
-                    return end;
+                    return end - 1;
                 }
             }
         }
 
-        return end - 1;
+        return -1;
     }
 
     size_t get_end(size_t start, const std::regex& pattern) {
@@ -332,29 +352,43 @@ private:
         return -1;
     }
 
-    lex_class extract_class(line_range range) {
+    lex_class extract_class(line_range range, std::smatch match) {
+        static const std::vector<std::regex> end_patterns = {
+            REG_CLASS,
+            REG_SECTION
+        };
         lex_class result;
         result.name = _lines[range.start];
         result.description = peek_next_line(range.start);
+        
+
+        TIMER_START(class_timer, result.name);
+        TIMER_OUT(class_timer, "Extracting sections from class ", result.name);
 
         std::vector<std::future<lex_section>> section_futures;
         line_range section_range;
-        for (size_t i = range.start; i < range.end; ++i) {
-            if(IS_MATCH(_lines[i], REG_SECTION)) {
+        for (size_t i = range.start + 1; i < range.end; ++i) {
+            int search_result = search_any(_lines[i], match, end_patterns);
+            if (search_result > 0) {
+                //if(MATCH(_lines[i], match, REG_SECTION)) {
                 section_range.start = i++;
-                section_range.end = get_end(i, REG_SECTION);
-                /*section_range.end = get_end(i + 1, REG_SECTION);*/
+                section_range.end = get_end<true>(i, end_patterns);
+
+                if (section_range.end == (size_t)-1) {
+                    section_range.end = _lines.size() - 1;
+                }
                 
 #ifdef DEBUG_THREADS
-                lex_section section = extract_section(section_range);
+                lex_section section = extract_section(section_range, match);
                 result.sections[section.name] = std::move(section);
 #else
-                section_futures.push_back(_pool.enqueue([&, section_range] {
-                    return extract_section(section_range);
+                section_futures.push_back(_pool.enqueue([&, section_range, match] {
+                    return extract_section(section_range, match);
                 }));
 #endif
 
                 i = section_range.end - 1;
+                //}
             }
         }
 
@@ -365,6 +399,8 @@ private:
         }
 #endif
 
+        TIMER_STOP(class_timer);
+        TIMER_OUT(class_timer, "Sections extracted in ");
         return result;
     }
 
@@ -389,34 +425,47 @@ private:
         extract_class_timer.reset();
     }
 
-    lex_section extract_section(line_range range) {
+    lex_section extract_section(line_range range, std::smatch match) {
         static const std::vector<std::regex> end_patterns = {
             REG_CLASS,
             REG_SECTION,
-            REG_ENTRY_HEADER
+            REG_ENTRY_HEADER,
+            REG_HEADING
         };
 
         lex_section result;
-        result.number = _lines[range.start];
+        result.number = match[1];
         result.name = peek_next_line(range.start);
+
+        TIMER_START(section_timer, result.name);
+        TIMER_OUT(section_timer, "Extracting entries from section ", result.number);
 
         std::vector<std::future<lex_entry>> entry_futures;
         line_range entry_range;
         for (size_t i = range.start; i < range.end; ++i) {
-            if(IS_MATCH(_lines[i], REG_ENTRY_HEADER)) {
-                entry_range.start = i++;
-                entry_range.end = get_end<false>(i, end_patterns);
+            int search_result = search_any(_lines[i], { REG_ENTRY_HEADER, REG_HEADING });
+            if (search_result > 0) {
+                if (search_result == 1)
+                    entry_range.start = ++i;
+                else if (search_result == 2)
+                    entry_range.start = i;
+
+                entry_range.end = get_end<true>(++i, end_patterns);
+
+                if (entry_range.end == (size_t)-1) {
+                    entry_range.end = _lines.size() - 1;
+                }
 
 #ifdef DEBUG_THREADS
                 lex_entry entry = extract_entry(entry_range, result.name);
                 result.entries.push_back(entry);
 #else
                 entry_futures.push_back(_pool.enqueue([&, entry_range] {
-                    return extract_entry(entry_range);
+                    return extract_entry(entry_range, result.name);
                 }));
 #endif
 
-                //i = entry_range.end;
+                i = entry_range.end;
             }
         }
 
@@ -426,6 +475,8 @@ private:
         }
 #endif
 
+        TIMER_STOP(section_timer);
+        TIMER_OUT(section_timer, "Entries extracted in ");
         return result;
     }
 
@@ -466,24 +517,68 @@ private:
     }
 
     lex_entry extract_entry(line_range range, const std::string& section_name) {
-        lex_entry result;
         const std::string& heading = _lines[range.start];
 
         std::smatch match;
-        if (std::regex_search(heading, match, REG_HEADING)) {
-            std::string entry_num = match[1];
-            std::string entry_name = clean_name(match[2]);
-            std::string pos = match[3];
+        if (!std::regex_search(heading, match, REG_HEADING)) return {};
 
-            std::string raw_text;
-            size_t total_size = 0;
-            vector<std::string>::const_iterator first = _lines.begin() + range.start;
-            vector<std::string>::const_iterator last = _lines.begin() + range.end;
+        std::string entry_num = match[1];
+        std::string entry_name = clean_name(match[2]);
+        std::string pos = match[3];
+        std::string e_name = "Timer " + entry_name;
 
-            while (first < last) {
+        TIMER_START(entry_timer, "Entry Timer");
+        TIMER_OUT(entry_timer, "Extracting entry...");
 
+        std::string raw_text;
+        size_t total_size = 0;
+        
+        for (size_t i = range.start; i < range.end; ++i) {
+            total_size += _lines[i].size() + 1;
+        }
+
+        raw_text.reserve(total_size);
+
+        for (size_t i = range.start; i < range.end; ++i) {
+            raw_text += _lines[i];
+            raw_text += ' ';
+        }
+
+        raw_text = raw_text.substr(match[0].length());
+        raw_text = clean_term_annotations(raw_text);
+
+        for (const auto& [pat, rep] : replace_match) {
+            raw_text = REPLACE(raw_text, pat, rep);
+        }
+
+        std::vector<std::string> terms;
+        auto words_begin = std::sregex_iterator(raw_text.begin(), raw_text.end(), REG_SPLITTER);
+        auto words_end = std::sregex_iterator();
+
+        for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+            std::string term = i->str();
+            trim(term);
+
+            term = REPLACE(term, REG_NUM_REMOVE, "");
+            term = REPLACE(term, REG_POS_REMOVE, "");
+
+            trim(term);
+
+            IF_MATCH(term, REG_NUM_FILTER) continue;
+            if (NOT_EMPTY(term)) {
+                terms.emplace_back(term);
             }
         }
+        
+        lex_entry result = {
+            entry_num,
+            entry_name,
+            pos,
+            terms
+        };
+
+        TIMER_STOP(entry_timer);
+        TIMER_OUT(entry_timer, "Extracted entry in ");
         return result;
     }
 
@@ -595,6 +690,43 @@ private:
     bool match_pat(const std::regex& pattern) {
         auto& [_, line, match] = c_iteration();
         return MATCH(line, match, pattern);
+    }
+
+    bool match_any(const std::string& line, const std::vector<std::regex>& patterns) {
+        for (const auto& pat : patterns) {
+            if (std::regex_match(line, pat)) return true;
+        }
+
+        return false;
+    }
+
+    bool match_all(const std::string& line, const std::vector<std::regex>& patterns) {
+        for (const auto& pat : patterns) {
+            if (!std::regex_match(line, pat)) return false;
+        }
+
+        return true;
+    }
+
+    int search_any(const std::string& line, const std::vector<std::regex>& patterns) {
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            if (SEARCH(line, patterns[i])) return i + 1;
+        }
+
+        return 0;
+    }
+
+    int search_any(const std::string& line, std::smatch& match, const std::regex& pattern) {
+        if (SEARCH_MATCH(line, match, pattern)) return 1;
+        return 0;
+    }
+
+    int search_any(const std::string& line, std::smatch& match, const std::vector<std::regex>& patterns) {
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            if (SEARCH_MATCH(line, match, patterns[i])) return i + 1;
+        }
+
+        return 0;
     }
 
     std::string clean_name(const std::string& name) {

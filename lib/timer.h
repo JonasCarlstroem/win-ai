@@ -72,6 +72,16 @@ public:
         }
     }
 
+    void display_time(const std::string caption = "") {
+
+    }
+
+    template<typename... Args>
+    void operator()(const Args&... args) {
+        this->out(args..., elapsed_seconds(), "s");
+        //out((args, ...), " ", elapsed_seconds(), "s");
+    }
+
 private:
     chrono::steady_clock::time_point start_time;
     chrono::steady_clock::time_point end_time;
