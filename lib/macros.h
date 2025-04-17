@@ -8,14 +8,20 @@
     #define TIMER(var_name, disp_name)                          \
     timer var_name { disp_name }                                
 
+#ifdef VERBOSE
     #define TIMER_OUT(var_name, ...)                            \
     var_name.out(##__VA_ARGS__)
+#else
+    #define TIMER_OUT(var_name, ...)
+#endif
+    #define TIMER_TIME(var_name, ...)                           \
+    var_name.display_time(##__VA_ARGS__)
 
-    #define TIMER_START(var_name, disp_name)               \
+    #define TIMER_START(var_name, disp_name)                    \
     TIMER(var_name, disp_name);                                 \
     var_name.start()
 
-    #define TIMER_STOP(var_name)                           \
+    #define TIMER_STOP(var_name)                                \
     var_name.stop();                                            
 #else
     #define TIMER(var_name, disp_name)
@@ -60,3 +66,12 @@ if(std::regex_match(##term, ##pattern))
 
 #define CURRENT_CLASS _index[c_class().current_class]
 #define CURRENT_SECTION CURRENT_CLASS.sections[c_section().section_number]
+
+#define CLASS(name) _classes[name]
+#define SECTION(cls, name) CLASS(cls).sections[name]
+
+#define TRY                                     \
+try {
+
+#define CATCH                                   \
+} catch(const std::exception& ex)

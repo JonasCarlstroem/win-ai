@@ -13,7 +13,7 @@ _REG(ENTRY_HEADER, R"(^(\d+)\.\s+[A-Z][A-Za-z, ]+$)");
 _REG(ENTRY, R"((\d+)\.\s+(.*?)(?:\s*-\s*([A-Z]+\.?))?)");
 _REG(SPLITTER, R"(([^,;\.]+))");
 _REG(NUM_FILTER, R"(\d+)");
-_REG(HEADING, R"(^(\d+)\.\s*(?:\[[^\]]*\]\.\s*)?(.+?)\s*[—\-]\s*([A-Za-z\.]+)\.?)");
+_REG(HEADING, R"(^(\d+)[a-z]?\.\s*(?:\[[^\]]*\]\.\s*)?(.+?)\s*[—\-]\s*([A-Za-z\.]+)\.?)");
 _REG(NUM_REMOVE, R"(\b\d+\b)");
 _REG_C(POS_REMOVE, R"(\b(?:adj|adv|n|v)\b\.?)", std::regex_constants::icase);
 
