@@ -27,7 +27,8 @@ int main() {
     parser.init();
 
     //parser.extract_indices();
-    parser.extract_indices2();
+    //parser.extract_indices2();
+    parser.extract_indices3();
     parser.display_toc();
 
     parser.display_section(1);

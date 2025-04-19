@@ -195,6 +195,44 @@ public:
         }
     }
 
+    void extract_indices3() {
+        std::vector<lex_class> classes;
+        line_range class_range;
+
+        TIMER_START(indices3_timer, "extract_indices3");
+        TIMER_OUT(indices3_timer, "Extracting indices");
+
+        try {
+            std::smatch match;
+            for (size_t i = 0; i < _lines.size(); ++i) {
+                int search_result = search_any(_lines[i], match, REG_CLASS);
+                if (search_result > 0) {
+                    class_range.start = i++;
+                    class_range.end = get_end(i, REG_CLASS);
+
+                    if (class_range.end == (size_t)-1) {
+                        class_range.end = _lines.size() - 1;
+                    }
+
+                    lex_class cls = extract_class(class_range, match);
+                    classes.push_back(std::move(cls));
+                }
+            }
+
+            out("DEBUG");
+        }
+        catch (const std::exception& ex) {
+            throw ex;
+        }
+        //for (auto& [class_name, section_list] : _section_futures) {
+        //    for (auto& section_fut : section_list) {
+        //        lex_section section = section_fut.get();
+        //        SECTION(class_name, section.name) = std::move(section);
+        //        //_classes[class_name].sections[section.name] = std::move(section);
+        //    }
+        //}
+    }
+
     void extract_indices2() {
         //lex_class_index classes;
         /*std::vector<std::future<lex_class>> class_futures;
@@ -375,46 +413,65 @@ private:
     }
 
     lex_class extract_class(line_range range, std::smatch match) {
-        static const std::vector<std::regex> end_patterns = {
-            REG_CLASS,
-            REG_SECTION
-        };
-        lex_class result;
-        result.name = _lines[range.start];
-        result.description = peek_next_line(range.start);
+        try {
+            static const std::vector<std::regex> end_patterns = {
+                REG_CLASS,
+                REG_SECTION
+            };
+            lex_class result;
+            result.name = _lines[range.start];
+            result.description = peek_next_line(range.start);
         
 
-        TIMER_START(class_timer, result.name);
-        TIMER_OUT(class_timer, "Extracting sections from class ", result.name);
+            TIMER_START(class_timer, result.name);
+            TIMER_OUT(class_timer, "Extracting sections from ", result.name);
 
-        std::vector<std::future<lex_section>> section_futures;
-        line_range section_range;
-        for (size_t i = range.start + 1; i < range.end; ++i) {
-            int search_result = search_any(_lines[i], match, end_patterns);
-            if (search_result > 0) {
-                section_range.start = i++;
-                section_range.end = get_end<true>(i, end_patterns);
+            std::vector<std::future<lex_section>> section_futures;
+            line_range section_range;
+            for (size_t i = range.start + 1; i < range.end; ++i) {
+                int search_result = search_any(_lines[i], match, end_patterns);
+                if (search_result > 0) {
+                    section_range.start = i++;
+                    section_range.end = get_end<true>(i, end_patterns);
 
-                if (section_range.end == (size_t)-1) {
-                    section_range.end = _lines.size() - 1;
-                }
-                
+                    if (section_range.end == (size_t)-1) {
+                        section_range.end = _lines.size() - 1;
+                    }
+                    try {
 #ifdef DEBUG_THREADS
-                lex_section section = extract_section(section_range, match);
-                result.sections[section.name] = std::move(section);
+                        lex_section section = extract_section(section_range, match);
+                        result.sections[section.name] = std::move(section);
 #else
-                _section_futures[result.name].push_back(_section_pool.enqueue([&, section_range, match] {
-                    return extract_section(section_range, match);
-                }));
+                        _section_futures[result.name].push_back(_section_pool.enqueue([&, section_range, match] {
+                            return extract_section(section_range, match);
+                        }));
 #endif
 
-                i = section_range.end - 1;
+                        i = section_range.end - 1;
+                    }
+                    catch (const std::exception& ex) {
+                        throw ex;
+                    }
+                }
             }
-        }
 
-        TIMER_STOP(class_timer);
-        TIMER_TIME(class_timer, "Sections extracted in ");
-        return result;
+            for (auto& [class_name, section_list] : _section_futures) {
+                for (auto& section_fut : section_list) {
+                    section_fut.wait();
+                }
+                for (auto& section_fut : section_list) {
+                    lex_section section = section_fut.get();
+                    SECTION(class_name, section.name) = std::move(section);
+                }
+            }
+
+            TIMER_STOP(class_timer);
+            TIMER_OUT(class_timer, "Section extraction queued.");
+            return result;
+        }
+        catch (const std::exception& ex) {
+            throw ex;
+        }
     }
 
     void extract_class(size_t line_num) {
