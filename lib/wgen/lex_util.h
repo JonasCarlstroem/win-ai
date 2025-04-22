@@ -39,96 +39,22 @@ const static std::vector<std::pair<std::regex, std::string>> replace_match = {
     { _REGEX(R"(\b(?:adj|adv|n|v)\b\.?)", std::regex_constants::icase), "" }
 };
 
-inline void trim(std::string& s) {
-    auto is_trim_char = [](unsigned char c) {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-    };
+template<typename... Args>
+using matcher_fn = bool(*)(Args... args);
 
-    s.erase(s.begin(), std::find_if_not(s.begin(), s.end(), is_trim_char));
-    s.erase(std::find_if_not(s.rbegin(), s.rend(), is_trim_char).base(), s.end());
-    //const auto str_begin = std::find_if_not(s.begin(), s.end(), is_trim_char);
-    //if (str_begin == s.end()) return "";
+using find_match_fn = matcher_fn<const std::string_view>;
+using class_section_fn = matcher_fn<const std::string_view, std::string&>;
 
-    //const auto str_end = std::find_if_not(s.rbegin(), s.rend(), is_trim_char).base();
-    //s = std::string(str_begin, str_end);
-    //return s;
-}
-
-inline std::vector<std::string> split(const std::string& s, char delim) {
-    std::vector<std::string> result;
-    std::stringstream ss(s);
-    std::string item;
-    while (std::getline(ss, item, delim)) {
-        result.push_back(item);
+template<typename Fn>
+struct matcher {
+    matcher(Fn f) : roman(), matchers() {
+        matchers.emplace_back(f);
+    }
+    matcher(std::initializer_list<Fn> list) : roman(), matchers(list) {
+        /*for (size_t i = 0; i < list.size(); ++i) {
+        }*/
     }
 
-    return result;
-}
-
-inline std::string join(const std::vector<std::string>& parts, const std::string& sep) {
-    std::ostringstream os;
-    for (size_t i = 0; i < parts.size(); ++i) {
-        if (i > 0) os << sep;
-        os << parts[i];
-    }
-
-    return os.str();
-}
-
-std::string& normalize_dashes(std::string& str) {
-    static const std::vector<std::string_view> dashes = {
-        "\xE2\x80\x93", // – EN DASH
-        "\xE2\x80\x94", // — EM DASH
-        "\xE2\x80\x95", // ‐ HORIZONTAL BAR
-        "\xE2\x88\x92"  // − MINUS SIGN
-    };
-    static const std::string_view dash_chars = "\u2013\u2014\u2212\u2012\u2011";
-
-    std::string result;
-    result.reserve(str.size());
-
-    for (size_t i = 0; i < str.size();) {
-        unsigned char c = static_cast<unsigned char>(str.at(i));
-
-        if (c < 0x80) {
-            result += str[i++];
-        }
-        else {
-            if (str.compare(i, 3, "\xE2\x80\x93") == 0 ||
-                str.compare(i, 3, "\xE2\x80\x94") == 0 ||
-                str.compare(i, 3, "\xE2\x88\x92") == 0 ||
-                str.compare(i, 3, "\xE2\x80\x92") == 0 ||
-                str.compare(i, 3, "\xE2\x80\x91") == 0) {
-                result += '-';
-                i += 3;
-            }
-            else {
-                result += str[i++];
-            }
-        }
-    }
-
-    return str = result;
-}
-
-inline int roman_to_int(const std::string& roman) {
-    static std::unordered_map<char, int> values = {
-        { 'I', 1}, { 'V', 5 }, { 'X', 10 }, { 'L', 50 },
-        { 'C', 100 }, { 'D', 500 }, { 'M', 1000 }
-    };
-
-    int total = 0;
-    int prev = 0;
-
-    for (int i = roman.size() - 1; i >= 0; --i) {
-        int current = values[roman[i]];
-        if (current < prev)
-            total -= current;
-        else
-            total += current;
-
-        prev = current;
-    }
-
-    return total;
-}
+    std::string roman;
+    std::vector<Fn> matchers;
+};
