@@ -39,6 +39,55 @@ const static std::vector<std::pair<std::regex, std::string>> replace_match = {
     { _REGEX(R"(\b(?:adj|adv|n|v)\b\.?)", std::regex_constants::icase), "" }
 };
 
+struct _time {
+    size_t row;
+    double seconds;
+};
+
+struct timer_data {
+    std::vector<_time> match_time{};
+    std::vector<_time> extract_class_time{};
+    std::vector<_time> extract_section_time{};
+    std::vector<_time> extract_entry_header_time{};
+    std::vector<_time> extract_entry_time{};
+
+    double total_class_time() const {
+        double total = 0;
+        for (const auto& it : extract_class_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_section_time() const {
+        double total = 0;
+        for (const auto& it : extract_section_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_entry_header_time() const {
+        double total = 0;
+        for (const auto& it : extract_entry_header_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+
+    double total_entry_time() const {
+        double total = 0;
+        for (const auto& it : extract_entry_time) {
+            total += it.seconds;
+        }
+
+        return total;
+    }
+} time_data;
+
 template<typename... Args>
 using matcher_fn = bool(*)(Args... args);
 

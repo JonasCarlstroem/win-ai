@@ -6,10 +6,90 @@
 #include <algorithm>
 #include <iostream>
 
-//using matcher_rom_fn = bool(*)(std::string_view, std::string&);
+struct range {
+    size_t start;
+    size_t end;
+};
+
+struct raw_class {
+    std::string name;
+    std::string description;
+    std::string raw_class_text;
+};
+
+struct raw_section {
+    std::string num;
+    std::string name;
+    std::string raw_section_text;
+};
+
+struct raw_entry_header {
+    int num;
+    std::string name;
+};
+
+struct raw_entry {
+    raw_entry_header header;
+    std::string raw_entry_text;
+};
+
 
 static constexpr std::string_view PREFIX_CLASS = "CLASS ";
 static constexpr std::string_view PREFIX_SECTION = "SECTION ";
+
+inline std::string trim_copy(const std::string& s);
+
+
+inline std::string get_and_strip_class_name(std::string& str) {
+    size_t name_start = str.find(PREFIX_CLASS);
+    if (name_start == std::string::npos) return "";
+
+    size_t name_end = str.find_first_of("\r\n", PREFIX_CLASS.size());
+    if (name_end == std::string::npos) name_end = str.size();
+
+    std::string class_name = str.substr(name_start, name_end - name_start);
+    str = trim_copy(str.substr(class_name.size()));
+    return class_name;
+}
+
+inline std::string get_and_strip_class_description(std::string& str) {
+    size_t desc_start = str.find_first_not_of(" \r\n");
+    if (desc_start == std::string::npos) return "";
+
+    size_t desc_end = str.find_first_of("\r\n", desc_start + 1);
+    if (desc_end == std::string::npos) desc_end = str.size();
+
+    std::string class_desc = str.substr(desc_start, desc_end - desc_start);
+    str = trim_copy(str.substr(class_desc.size()));
+    return class_desc;
+}
+
+inline std::string get_and_strip_section_num(std::string& str) {
+    size_t sec_start = str.find(PREFIX_SECTION);
+    if (sec_start == std::string::npos) return "";
+
+    size_t num_start = str.find_first_not_of(' ', sec_start + PREFIX_SECTION.size());
+    if (num_start == std::string::npos) return "";
+
+    size_t num_end = str.find('.');
+    if (num_end == std::string::npos) return "";
+
+    std::string sec_num = str.substr(num_start, num_end - num_start);
+    str = trim_copy(str.substr(num_end + 1));
+    return sec_num;
+}
+
+inline std::string get_and_strip_section_name(std::string& str) {
+    size_t name_start = str.find_first_not_of(" \r\n");
+    if (name_start == std::string::npos) return "";
+
+    size_t name_end = str.find_first_of("\r\n", name_start + 1);
+    if (name_end == std::string::npos) name_end = str.size();
+
+    std::string sec_name = str.substr(name_start, name_end - name_start);
+    str = trim_copy(str.substr(sec_name.size()));
+    return sec_name;
+}
 
 inline bool starts_with(const std::string_view str, const std::string_view prefix) {
     return str.size() >= prefix.size() &&
@@ -58,6 +138,24 @@ bool is_line_section(const std::string_view line, std::string& roman_num_out) {
     return false;
 }
 
+bool is_line_sub_section(const std::string_view line) {
+    size_t dot_pos = line.find('.');
+    if (dot_pos == std::string_view::npos) return false;
+
+    std::string_view num_part = line.substr(0, dot_pos);
+    if (!std::all_of(num_part.begin(), num_part.end(), ::isdigit)) return false;
+
+    size_t label_start = line.find_first_not_of(" ", dot_pos + 1);
+    if (label_start == std::string_view::npos) return false;
+
+    std::string_view label_part = line.substr(label_start);
+    if (label_part.empty() || !std::all_of(label_part.begin(), label_part.end(), [](char c) {
+        return std::isupper(c) || std::isspace(c) || std::ispunct(c);
+    })) return false;
+
+    return true;
+}
+
 bool is_line_entry_header(const std::string_view line) {
     size_t dot_pos = line.find('.');
     if (dot_pos == std::string_view::npos) return false;
@@ -87,6 +185,76 @@ bool is_line_entry_header(const std::string_view line, int& entry_num_out, std::
     entry_num_out = std::stoi(std::string(num_part));
     label_out = std::string(label_part);
     return true;
+}
+
+inline std::string get_line(std::string& str, size_t* pos = 0) {
+    size_t line_end = str.find_first_of("\r\n", *pos);
+
+    if (line_end == 0) return "";
+    if (line_end == std::string::npos) line_end = str.size();
+    
+    std::string line = str.substr(*pos, line_end);
+    *pos = line.size() + 1;
+    //str = trim_copy(str.substr(line.size()));
+    return line;
+}
+
+inline raw_entry_header get_and_strip_entry_header(std::string& str) {
+    std::string line = get_line(str);
+    if (is_line_sub_section(line)) {
+        str = trim_copy(str.substr(line.size()));
+        line = get_line(str);
+    }
+
+    int num;
+    std::string name;
+    if (is_line_entry_header(line,  num, name)) return { num, name };
+    return {};
+}
+
+inline size_t get_entry_start(std::string& str) {
+    bool found = false;
+    size_t pos = 0;
+    while (!found) {
+        std::string line = get_line(str, &pos);
+        if (is_line_sub_section(line)) {
+            line = get_line(str);
+        }
+
+        if (is_line_entry_header(line)) pos - line.size();
+    }
+
+    return -1;
+}
+
+inline void strip_sub_section(std::string& str) {
+    std::string line = get_line(str);
+    if (is_line_sub_section(line)) {
+        str = trim_copy(str.substr(line.size()));
+    }
+}
+
+inline void strip_sub_sections(std::string& str) {
+    size_t start = 0;
+    int stripped = 0;
+    while (start < str.size()) {
+        size_t end = str.find_first_of("\r\n", start);
+        if (end == std::string::npos) end = str.size();
+
+        std::string line = str.substr(start, end - start);
+
+        if (is_line_sub_section(line)) {
+            size_t erase_len = (end < str.size() && str[end] == '\r' && end + 1 < str.size() && str[end + 1] == '\n') ? 2 :
+                ((end < str.size() && (str[end] == '\n' || str[end] == '\r')) ? 1 : 0);
+
+            //str = trim_copy(str.replace(start, pos, ""));
+            str.erase(start, (end - start) + erase_len);
+            stripped += 1;
+        }
+        else {
+            start = end + 1;
+        }
+    }
 }
 
 bool is_term_number(const std::string_view term) {
@@ -241,6 +409,27 @@ inline std::string trim_copy(const std::string& s) {
     res.erase(res.begin(), std::find_if_not(res.begin(), res.end(), is_trim_char));
     res.erase(std::find_if_not(res.rbegin(), res.rend(), is_trim_char).base(), res.end());
     return res;
+}
+
+inline void replace(std::string& s, char char_to_replace, char replace_with) {
+    for (auto& c : s) {
+        if (c == char_to_replace) {
+            c = replace_with;
+        }
+    }
+}
+
+inline void replace(std::string& s, const char* str_to_replace, const char* replace_with) {
+    size_t start = 0;
+    size_t from_len = strlen(str_to_replace);
+    size_t to_len = strlen(replace_with);
+
+    if (from_len == 0) return;
+
+    while ((start = s.find(str_to_replace, start)) != std::string::npos) {
+        s.replace(start, from_len, replace_with);
+        start += to_len;
+    }
 }
 
 inline std::vector<std::string> split(const std::string& s, char delim) {

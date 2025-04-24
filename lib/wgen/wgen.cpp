@@ -24,11 +24,13 @@ int main() {
     }
 
     lex_parser parser("thesaurus.txt", out);
-    parser.init();
+    /*parser.init();*/
+    parser.init2();
 
     //parser.extract_indices();
     //parser.extract_indices2();
-    parser.extract_indices3();
+    /*parser.extract_indices3();*/
+    parser.extract_classes();
     parser.display_toc();
 
     parser.display_section(1);

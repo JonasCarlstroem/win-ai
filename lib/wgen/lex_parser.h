@@ -18,60 +18,6 @@
 #ifdef PROFILING && _defined(TIMER)
 #endif
 
-struct _time {
-    size_t row;
-    double seconds;
-};
-
-struct timer_data {
-    std::vector<_time> match_time{};
-    std::vector<_time> extract_class_time{};
-    std::vector<_time> extract_section_time{};
-    std::vector<_time> extract_entry_header_time{};
-    std::vector<_time> extract_entry_time{};
-
-    double total_class_time() const {
-        double total = 0;
-        for (const auto& it : extract_class_time) {
-            total += it.seconds;
-        }
-
-        return total;
-    }
-
-    double total_section_time() const {
-        double total = 0;
-        for (const auto& it : extract_section_time) {
-            total += it.seconds;
-        }
-
-        return total;
-    }
-
-    double total_entry_header_time() const {
-        double total = 0;
-        for (const auto& it : extract_entry_header_time) {
-            total += it.seconds;
-        }
-
-        return total;
-    }
-
-    double total_entry_time() const {
-        double total = 0;
-        for (const auto& it : extract_entry_time) {
-            total += it.seconds;
-        }
-
-        return total;
-    }
-} time_data;
-
-struct line_range {
-    size_t start;
-    size_t end;
-};
-
 class lex_parser {
 private:
     output& out;
@@ -91,6 +37,9 @@ private:
 
     std::vector<std::future<lex_class>> _class_futures;
     std::unordered_map<std::string, std::vector<std::future<lex_section>>> _section_futures;
+
+    std::unordered_map<std::string, std::pair<std::string, std::string>> _raw_class_text;
+    std::vector<raw_class> _raw_class_text2;
     
     struct {
         struct {
@@ -161,6 +110,46 @@ public:
 
     }
 
+    void init2() {
+        std::ifstream file(_lex_file, std::ios::binary);
+
+        if (!file.is_open()) {
+            out.err("Error opening file: ", _lex_file);
+            exit(-1);
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string content = buffer.str();
+
+        normalize_dashes(content);
+        size_t start = content.find(PREFIX_CLASS), end = 0;
+        while (end < content.size()) {
+            end = content.find(PREFIX_CLASS, start + 1);
+            if (end == std::string::npos) end = content.size();
+            std::string cls = content.substr(start, end - start);
+
+            std::string class_name = get_and_strip_class_name(cls);
+            std::string class_desc = get_and_strip_class_description(cls);
+
+            /*std::string clsDesc = cls.substr(lbl_end + 2, cls.find_first_of("\r\n", lbl_end + 2));*/
+            if (!cls.empty() && cls.back() == '\r') {
+                cls.pop_back();
+            }
+
+            if (!cls.empty() && cls.size() > 1) {
+                raw_class raw = { class_name, class_desc, cls };
+                _raw_class_text2.emplace_back(std::move(raw));
+                //auto& p = std::make_pair(clsDesc, cls);
+                //_raw_class_text[clsName] = std::move(p);
+            }
+
+            start = end;
+        }
+
+        out("start=", start, "\r\nend=", end, "\r\ncontent size=", content.size());
+    }
+
     void init() {
         std::ifstream file(_lex_file, std::ios::binary);
 
@@ -196,9 +185,25 @@ public:
         }
     }
 
+    void extract_classes() {
+        std::vector<lex_class> classes;
+        TIMER_START(indices4_timer, "extract_indices4");
+        TIMER_OUT(indices4_timer, "Extracting indices");
+
+        try {
+            for (auto& raw_cls : _raw_class_text2) {
+                lex_class cls = extract_class(raw_cls);
+                classes.push_back(std::move(cls));
+            }
+        }
+        catch (const std::exception& ex) {
+            throw ex;
+        }
+    }
+
     void extract_indices3() {
         std::vector<lex_class> classes;
-        line_range class_range;
+        range class_range;
 
         TIMER_START(indices3_timer, "extract_indices3");
         TIMER_OUT(indices3_timer, "Extracting indices");
@@ -245,7 +250,7 @@ public:
         std::unordered_map<std::string, std::vector<std::future<lex_section>>> section_futures;*/
 
         std::smatch match;
-        line_range class_range;
+        range class_range;
 
         TIMER_START(extraction, "Index Timer");
         TIMER_OUT(extraction, "Extracting indices...");
@@ -475,7 +480,38 @@ private:
         return -1;
     }
 
-    lex_class extract_class(line_range range) {
+    lex_class extract_class(raw_class cls) {
+        lex_class result;
+        result.name = cls.name;
+        result.description = cls.description;
+
+        std::string content = cls.raw_class_text;
+        size_t section_start = content.find(PREFIX_SECTION), section_end = 0;
+        //range section_range = { content.find(PREFIX_SECTION), 0 };
+        while (section_end < content.size()) {
+            section_end = content.find(PREFIX_SECTION, section_start + 1);
+            if (section_end == std::string::npos) section_end = content.size();
+            std::string section = content.substr(section_start, section_end - section_start);
+
+            std::string sec_num = get_and_strip_section_num(section);
+            std::string sec_name = get_and_strip_section_name(section);
+
+            if (!section.empty() && section.back() == '\r') {
+                section.pop_back();
+            }
+
+            if (!section.empty() && section.size() > 1) {
+                raw_section raw = { sec_num, sec_name, section };
+                lex_section sec = extract_section(raw);
+
+                result.sections[sec_name] = std::move(sec);
+            }
+        }
+
+        return result;
+    }
+
+    lex_class extract_class(range class_range) {
         try {
             //static const std::vector<std::regex> end_patterns = {
             //    REG_CLASS,
@@ -488,19 +524,19 @@ private:
             };
 
             lex_class result;
-            result.name = _lines[range.start];
-            result.description = peek_next_line(range.start);
+            result.name = _lines[class_range.start];
+            result.description = peek_next_line(class_range.start);
         
 
             TIMER_START(class_timer, result.name);
             TIMER_OUT(class_timer, "Extracting sections from ", result.name);
 
             std::vector<std::future<lex_section>> section_futures;
-            line_range section_range;
+            range section_range;
 
             matcher<class_section_fn> m({ is_line_class, is_line_section });
 
-            for (size_t i = range.start + 1; i < range.end; ++i) {
+            for (size_t i = class_range.start + 1; i < class_range.end; ++i) {
                 int search_result = search_any(_lines[i], m);
                 if (search_result > 0) {
                     section_range.start = i++;
@@ -582,7 +618,22 @@ private:
         extract_class_timer.reset();
     }
 
-    lex_section extract_section(line_range range, std::string_view roman) {
+    lex_section extract_section(raw_section section) {
+        lex_section result;
+        result.number = section.num;
+        result.name = section.name;
+
+        std::string content = section.raw_section_text;
+        strip_sub_sections(content);
+        trim(content);
+        size_t entry_start = get_entry_start(content), entry_end = 0;
+        while (entry_end < content.size()) {
+            
+        }
+        return result;
+    }
+
+    lex_section extract_section(range section_range, std::string_view roman) {
         try {
             static const std::vector<std::regex> end_patterns = {
                 REG_CLASS,
@@ -599,18 +650,22 @@ private:
 
             lex_section result;
             result.number = roman;
-            result.name = peek_next_line(range.start);
+            result.name = peek_next_line(section_range.start);
 
             TIMER_START(section_timer, result.name);
             TIMER_OUT(section_timer, "Extracting entries from section ", result.number);
 
             std::vector<std::future<lex_entry>> entry_futures;
-            line_range entry_range;
-            for (size_t i = range.start; i < range.end; ++i) {
+            range entry_range;
+            for (size_t i = section_range.start; i < section_range.end; ++i) {
                 /*int search_result = search_any_reg(_lines[i], { REG_ENTRY_HEADER, REG_HEADING });*/
                 int entry_num = 0;
                 std::string entry_label;
                 //int search_result = search_any(_lines[i], is_line_entry_header);
+                if (is_line_sub_section(_lines[i])) {
+
+                }
+
                 bool s_res = is_line_entry_header(_lines[i]);
                 if (s_res) {
                     /*if (search_result == 1)
@@ -680,7 +735,7 @@ private:
         extract_entry_header_timer.reset();
     }
 
-    lex_entry extract_entry(line_range range, const std::string& section_name) {
+    lex_entry extract_entry(range range, const std::string& section_name) {
         const std::string& heading = _lines[range.start];
 
         std::string::size_type dash_pos = heading.find("-");
@@ -744,7 +799,7 @@ private:
         };
     }
 
-    //lex_entry extract_entry(line_range range, const std::string& section_name) {
+    //lex_entry extract_entry(range range, const std::string& section_name) {
     //    const std::string & heading = _lines[range.start];
 
     //    std::smatch match;
