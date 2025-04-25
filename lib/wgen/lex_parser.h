@@ -626,9 +626,16 @@ private:
         std::string content = section.raw_section_text;
         strip_sub_sections(content);
         trim(content);
-        size_t entry_start = get_entry_start(content), entry_end = 0;
-        while (entry_end < content.size()) {
-            
+        size_t  entry_start = get_entry_start(content, 0),
+                entry_start_len = get_entry_start_len(content, entry_start),
+                entry_pos = entry_start + entry_start_len;
+
+        while (entry_pos < content.size()) {
+            /*entry_end = get_entry_end(content, entry_start + entry_start_len);*/
+            std::string entry = content.substr(entry_start, entry_pos);
+
+            entry_start = get_entry_start(content, entry_end + 1);
+            entry_start_len = get_entry_start_len(content, entry_start);
         }
         return result;
     }
@@ -733,6 +740,73 @@ private:
         extract_entry_header_timer.stop();
         time_data.extract_entry_header_time.emplace_back(_time{ row, extract_entry_header_timer.elapsed_seconds() });
         extract_entry_header_timer.reset();
+    }
+
+    lex_entry extract_entry(std::string& content, const std::string& section_name) {
+        //const std::string& heading = _lines[range.start];
+        const std::string& heading = get_line(content, 0);
+
+        std::string::size_type dash_pos = heading.find("-");
+        if (dash_pos == std::string::npos) return {};
+
+        std::string::size_type pos_dot = heading.find('.', dash_pos);
+        if (pos_dot == std::string::npos || pos_dot <= dash_pos) return {};
+
+        std::string::size_type dot_pos = heading.find('.');
+        std::string entry_num = trim_copy(heading.substr(0, dot_pos));
+
+        std::string::size_type label_start = heading.find_first_not_of(" ", dot_pos + 1);
+        std::string entry_name = trim_copy(heading.substr(label_start, dash_pos - label_start));
+
+        std::string pos = trim_copy(heading.substr(dash_pos + 1, pos_dot - dash_pos - 1));
+
+        /*std::string rest = trim_copy(heading.substr(pos_dot + 1));
+        std::string raw_text;
+        size_t total_size = rest.size() + 1;
+        for (size_t i = range.start + 1; i < range.end; ++i) {
+            total_size += _lines[i].size() + 1;
+        }
+
+        raw_text.reserve(total_size);
+        raw_text += rest;
+        raw_text += ' ';
+        for (size_t i = range.start + 1; i < range.end; ++i) {
+            raw_text += _lines[i];
+            raw_text += ' ';
+        }
+
+        raw_text = clean_term_annotations(raw_text);
+
+        raw_text = reduce_whitespace(raw_text);
+        raw_text = remove_parenthesis_with_number(raw_text);
+        raw_text = remove_number_dot(raw_text);
+        raw_text = remove_v_dot(raw_text);
+        raw_text = remove_isolated_numbers(raw_text);
+        raw_text = remove_pos_tags(raw_text);
+
+        std::vector<std::string> terms;
+        size_t start = 0;
+        while (start < raw_text.size()) {
+            size_t end = raw_text.find_first_of(",;.", start);
+            std::string term = raw_text.substr(start, end - start);
+            trim(term);
+
+            if (!term.empty() && !is_term_number(term) && !is_term_pos_tag(term)) {
+                terms.emplace_back(std::move(term));
+            }
+
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }*/
+
+        //return {
+        //    entry_num,
+        //    clean_name(entry_name),
+        //    pos,
+        //    terms
+        //};
+
+        return {};
     }
 
     lex_entry extract_entry(range range, const std::string& section_name) {

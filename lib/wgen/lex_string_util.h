@@ -187,14 +187,14 @@ bool is_line_entry_header(const std::string_view line, int& entry_num_out, std::
     return true;
 }
 
-inline std::string get_line(std::string& str, size_t* pos = 0) {
+inline std::string get_line(std::string str, size_t* pos = 0) {
     size_t line_end = str.find_first_of("\r\n", *pos);
 
     if (line_end == 0) return "";
     if (line_end == std::string::npos) line_end = str.size();
     
     std::string line = str.substr(*pos, line_end);
-    *pos = line.size() + 1;
+    *pos = line.size();
     //str = trim_copy(str.substr(line.size()));
     return line;
 }
@@ -212,16 +212,46 @@ inline raw_entry_header get_and_strip_entry_header(std::string& str) {
     return {};
 }
 
-inline size_t get_entry_start(std::string& str) {
+inline size_t get_entry_start_len(std::string& str, size_t start = 0) {
     bool found = false;
-    size_t pos = 0;
+    size_t pos = start;
+    while (!found) {
+        std::string line = get_line(str, &pos);
+        if (is_line_sub_section(line)) {
+            line = get_line(str, &pos);
+        }
+
+        if (is_line_entry_header(line)) return pos;
+    }
+
+    return -1;
+}
+
+inline size_t get_entry_start(std::string& str, size_t start = 0) {
+    bool found = false;
+    size_t pos = start;
     while (!found) {
         std::string line = get_line(str, &pos);
         if (is_line_sub_section(line)) {
             line = get_line(str);
         }
 
-        if (is_line_entry_header(line)) pos - line.size();
+        if (is_line_entry_header(line)) return pos - line.size();
+    }
+
+    return -1;
+}
+
+inline size_t get_entry_end(std::string& str, size_t start = 0) {
+    bool found = false;
+    size_t pos = start;
+    while (!found) {
+        std::string line = get_line(str, &pos);
+        if (is_line_sub_section(line)) {
+            line = get_line(str);
+        }
+
+        if (is_line_entry_header(line)) return pos;
     }
 
     return -1;
