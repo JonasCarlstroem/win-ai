@@ -634,7 +634,7 @@ private:
             /*entry_end = get_entry_end(content, entry_start + entry_start_len);*/
             std::string entry = content.substr(entry_start, entry_pos);
 
-            entry_start = get_entry_start(content, entry_end + 1);
+            entry_start = get_entry_start(content, entry_pos + 1);
             entry_start_len = get_entry_start_len(content, entry_start);
         }
         return result;
