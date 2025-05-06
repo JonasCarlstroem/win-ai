@@ -12,12 +12,15 @@ if(MSVC)
 endif()
 
 add_subdirectory("lib/thread")
+add_subdirectory("lib/lex_parser")
 add_subdirectory("lib/wgen")
+add_subdirectory("test")
 
 file(COPY "${CMAKE_SOURCE_DIR}/lib/intents" DESTINATION "${CMAKE_BINARY_DIR}")
 
 add_executable(trainer "train_classifier.cpp" "lib/classification/classifier_data.h" "lib/process.h")
 add_executable(win-ai "main.cpp" ${AI_SOURCES})
+
 
 set(INTENTS_OUT_DIR "${CMAKE_BINARY_DIR}/intents")
 set(INTENTS_SRC_DIR "${CMAKE_SOURCE_DIR}/lib/intents")
@@ -26,10 +29,18 @@ message(STATUS "INTENTS_OUT_DIR=${INTENTS_OUT_DIR}")
 message(STATUS "INTENTS_SRC_DIR=${INTENTS_SRC_DIR}")
 
 target_link_libraries(wgen
-		INTERFACE thread)
+		INTERFACE thread
+		INTERFACE lex_parser)
+
+target_link_libraries("test-exec" 
+		INTERFACE lex_parser)
 
 target_include_directories(wgen PRIVATE
-		${CMAKE_SOURCE_DIR}/lib/thread)
+		${CMAKE_SOURCE_DIR}/lib/thread
+		${CMAKE_SOURCE_DIR}/lib/lex_parser)
+
+target_include_directories("test-exec" PRIVATE
+		${CMAKE_SOURCE_DIR}/lib/lex_parser)
 
 add_custom_command(TARGET trainer PRE_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove_directory ${INTENTS_OUT_DIR}

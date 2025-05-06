@@ -626,6 +626,7 @@ private:
         std::string content = section.raw_section_text;
         strip_sub_sections(content);
         trim(content);
+        raw_entry_header entry_header = get_and_strip_entry_header(content);
         size_t  entry_start = get_entry_start(content, 0),
                 entry_start_len = get_entry_start_len(content, entry_start),
                 entry_pos = entry_start + entry_start_len;

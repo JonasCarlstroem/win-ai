@@ -188,6 +188,7 @@ bool is_line_entry_header(const std::string_view line, int& entry_num_out, std::
 }
 
 inline std::string get_line(std::string str, size_t* pos = 0) {
+    if (pos == nullptr) pos = new size_t{ 0 };
     size_t line_end = str.find_first_of("\r\n", *pos);
 
     if (line_end == 0) return "";
@@ -206,7 +207,13 @@ inline raw_entry_header get_and_strip_entry_header(std::string& str) {
         line = get_line(str);
     }
 
-    int num;
+    size_t dot_pos = line.find('.');
+    std::string_view num_part = line.substr(0, dot_pos);
+    size_t label_start = line.find_first_not_of(" ", dot_pos + 1);
+    size_t label_end = line.find_first_of(" ", label_start + 1);
+    std::string_view label_part = line.substr(label_start, label_end - label_start);
+
+    int num; // = std::stoi(std::string(num_part));
     std::string name;
     if (is_line_entry_header(line,  num, name)) return { num, name };
     return {};
@@ -255,6 +262,23 @@ inline size_t get_entry_end(std::string& str, size_t start = 0) {
     }
 
     return -1;
+}
+
+inline std::string get_entry_header(std::string& content) {
+    bool found = false;
+    size_t pos = 0;
+    while (!found) {
+        std::string line = get_line(content, &pos);
+
+        if (is_line_entry_header(line)) {
+            content.replace(pos, line.length(), "");
+            return line;
+        }
+
+        if (pos == content.size()) break;
+    }
+
+    return "";
 }
 
 inline void strip_sub_section(std::string& str) {
